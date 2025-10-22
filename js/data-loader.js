@@ -42,10 +42,11 @@ export class DataLoader {
     this.log(`Total rows loaded: ${this.raw.length}`);
   }
 
+  // Приватный метод для парсинга CSV
   #parseCSV(text) {
     const [h, ...lines] = text.trim().split(/\r?\n/);
     const headers = h.split(',').map(s => s.trim());
-    
+
     // Логируем заголовки для отладки
     console.log('Headers:', headers);  // Логируем заголовки столбцов
 
@@ -66,6 +67,7 @@ export class DataLoader {
     });
   }
 
+  // Приватный метод для преобразования строки в число
   #num(v) {
     const n = Number(v);
     return Number.isFinite(n) ? n : NaN;
