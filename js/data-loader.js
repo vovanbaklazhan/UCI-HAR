@@ -13,7 +13,7 @@ export class DataLoader {
   }
 
   // Загружаем данные из одного файла
-  async loadCSV(path = 'https://vovanbaklazhan.github.io/UCI-HAR/data/train_1.csv') {
+  async loadCSV(path = 'https://vovanbaklazhan.github.io/UCI-HAR/data/train.csv') {
     this.setStatus('loading data…');
     this.log(`Fetching ${path}`);
     this.raw = [];
@@ -22,8 +22,14 @@ export class DataLoader {
       const res = await fetch(path);
       if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`);
       const text = await res.text();
+      
+      // Проверяем, что файл не пустой
+      if (!text.trim()) {
+        throw new Error(`CSV file at ${path} is empty.`);
+      }
+
       const data = this.#parseCSV(text);
-      if (!data.length) throw new Error(`CSV ${path} is empty.`);
+      if (!data.length) throw new Error(`CSV ${path} has no valid rows.`);
       this.raw = [...this.raw, ...data]; // Объединяем данные
       this.log(`Loaded ${data.length} rows from ${path}`);
     } catch (e) {
@@ -39,10 +45,22 @@ export class DataLoader {
   #parseCSV(text) {
     const [h, ...lines] = text.trim().split(/\r?\n/);
     const headers = h.split(',').map(s => s.trim());
-    return lines.map(line => {
+    
+    // Логируем заголовки для отладки
+    console.log('Headers:', headers);
+
+    return lines.map((line, idx) => {
       const cells = line.split(',').map(v => v.trim());
       const o = {};
-      headers.forEach((k, i) => o[k] = cells[i] ?? '');
+      headers.forEach((k, i) => {
+        o[k] = cells[i] ?? '';
+      });
+
+      // Логируем строки данных для отладки
+      if (idx < 5) {  // Показываем первые 5 строк для проверки
+        console.log(`Row ${idx}:`, o);
+      }
+
       return o;
     });
   }
@@ -53,8 +71,11 @@ export class DataLoader {
   }
 
   #inferSchema() {
-    const target = 'Activity'; // Целевая переменная, которая соответствует активности
-    if (!(target in this.raw[0])) throw new Error(`Target "${target}" not found`);
+    const target = 'Activity'; // Убедитесь, что столбец с активностью называется "Activity"
+    if (!(target in this.raw[0])) {
+      throw new Error(`Target "${target}" not found`);
+    }
+
     const features = {};
     const cols = Object.keys(this.raw[0]).filter(c => c !== target); // Исключаем целевой признак
 
@@ -95,7 +116,7 @@ export class DataLoader {
         }
       }
       X.push(row);
-      y.push([String(r[this.schema.target])]);
+      y.push([String(r[this.schema.target])]); // Целевой столбец с активностью
     }
 
     this.scaler = { type: 'minmax', stats: {} };
