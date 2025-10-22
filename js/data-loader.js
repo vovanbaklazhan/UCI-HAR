@@ -1,4 +1,3 @@
-// js/data-loader.js
 export class DataLoader {
   constructor(logFn, statusFn) {
     this.log = logFn || console.log;
@@ -24,6 +23,11 @@ export class DataLoader {
     this.raw = this.#parseCSV(text);
     if (!this.raw.length) throw new Error('CSV is empty.');
     
+    // Проверим, что столбец "Activity" существует
+    if (!this.#checkTargetColumn('Activity')) {
+      throw new Error('Target column "Activity" not found in the dataset');
+    }
+    
     this.#inferSchema();
     this.setStatus('data loaded');
     this.log(`Loaded rows=${this.raw.length}`);
@@ -41,6 +45,12 @@ export class DataLoader {
     });
   }
 
+  // Проверка наличия целевого столбца "Activity"
+  #checkTargetColumn(target) {
+    const headers = Object.keys(this.raw[0]);
+    return headers.some(header => header.trim().toLowerCase() === target.toLowerCase());
+  }
+
   // Преобразование строки в число
   #num(v) {
     const n = Number(v);
@@ -50,28 +60,19 @@ export class DataLoader {
   // Определение схемы данных
   #inferSchema() {
     const target = 'Activity';  // Целевой столбец
-    if (!(target in this.raw[0])) throw new Error(`Target "${target}" not found`);  // Проверка на наличие столбца
-    
-    const knownCat = new Set(['road_type', 'lighting', 'weather', 'time_of_day', 'road_signs_present', 'public_road', 'holiday', 'school_season']);
-    const knownNum = new Set(['num_lanes', 'curvature', 'speed_limit', 'num_reported_accidents']);
     
     const features = {};
     const cols = Object.keys(this.raw[0]).filter(c => c !== target);  // Исключаем целевой признак
     
     for (const c of cols) {
       let type = 'numeric';
-      if (knownCat.has(c)) type = 'categorical';
-      if (knownNum.has(c)) type = 'numeric';
-      
-      if (!knownCat.has(c) && !knownNum.has(c)) {
-        const sample = this.raw.slice(0, Math.min(5000, this.raw.length)).map(r => r[c]);
-        const uniq = new Set(sample.map(String));
-        const numRatio = sample.filter(v => Number.isFinite(Number(v))).length / Math.max(1, sample.length);
-        
-        if (uniq.size <= 10) type = 'categorical';
-        else if (numRatio > 0.9) type = 'numeric';
+      if (['road_type', 'lighting', 'weather', 'time_of_day', 'road_signs_present', 'public_road', 'holiday', 'school_season'].includes(c)) {
+        type = 'categorical';
       }
-      
+      if (['num_lanes', 'curvature', 'speed_limit', 'num_reported_accidents'].includes(c)) {
+        type = 'numeric';
+      }
+
       features[c] = { name: c, type };
     }
     
@@ -195,3 +196,4 @@ export class DataLoader {
     }
   }
 }
+
