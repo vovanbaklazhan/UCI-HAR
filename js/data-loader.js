@@ -47,18 +47,18 @@ export class DataLoader {
 
   // Приватный метод для парсинга CSV
   parseCSV(text) {
-    const [h, ...lines] = text.trim().split(/\r?\n/);
-    const headers = h.split(',').map(s => s.trim());
+    const [h, ...lines] = text.trim().split(/\r?\n/);  // Разделяем текст на строки
+    const headers = h.split(',').map(s => s.trim());   // Разделяем заголовки и удаляем лишние пробелы
 
     // Логируем заголовки для отладки
     console.log('Headers:', headers);  // Логируем заголовки столбцов
 
     return lines.map((line, idx) => {
       const cells = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g).map(v => v.replace(/^"(.*)"$/, '$1').trim());
-
+      
       const o = {};
       headers.forEach((k, i) => {
-        o[k] = cells[i] ?? '';
+        o[k] = cells[i] ?? '';  // Присваиваем значения для каждого столбца
       });
 
       // Логируем строки данных для отладки
@@ -66,7 +66,7 @@ export class DataLoader {
         console.log(`Row ${idx}:`, o);
       }
 
-      return o;
+      return o;  // Возвращаем объект с данными для этой строки
     });
   }
 
