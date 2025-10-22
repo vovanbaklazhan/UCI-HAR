@@ -8,14 +8,19 @@ const log = (msg) => {
     console.log(msg);
     const t = new Date().toLocaleTimeString();
     const el = $('log');
-    const newContent = `[${t}] ${msg}`;
-    el.textContent = el.textContent === '—' ? newContent : el.textContent + '\n' + newContent;
-    el.scrollTop = el.scrollHeight;
+    if (el) {
+        const newContent = `[${t}] ${msg}`;
+        el.textContent = el.textContent === '—' ? newContent : el.textContent + '\n' + newContent;
+        el.scrollTop = el.scrollHeight;
+    }
 };
 
 const setStatus = (s) => {
     console.log('Status:', s);
-    $('status').textContent = `Status: ${s}`;
+    const statusEl = $('status');
+    if (statusEl) {
+        statusEl.textContent = `Status: ${s}`;
+    }
 };
 
 // DataLoader Class
@@ -45,22 +50,16 @@ class DataLoader {
             
             const headers = Object.keys(this.raw[0]);
             this.log(`Loaded ${this.raw.length} rows with ${headers.length} columns`);
-            this.log(`First few headers: ${headers.slice(0, 10).join(', ')}...`);
             
-            // Найдем целевую колонку - попробуем разные варианты
+            // Найдем целевую колонку
             let targetColumn = this.findTargetColumn(headers);
             
             if (!targetColumn) {
-                // Если не нашли Activity, используем последнюю колонку как целевую
                 targetColumn = headers[headers.length - 1];
                 this.log(`Using last column as target: "${targetColumn}"`);
             }
             
             this.log(`Using target column: "${targetColumn}"`);
-            
-            // Проверим значения в целевой колонке
-            const targetValues = this.raw.map(row => row[targetColumn]).slice(0, 10);
-            this.log(`First 10 target values: ${targetValues.join(', ')}`);
             
             // Создаем простую схему
             this.schema = {
@@ -85,7 +84,6 @@ class DataLoader {
     }
 
     findTargetColumn(headers) {
-        // Попробуем найти целевую колонку по разным именам
         const possibleTargets = ['Activity', 'activity', 'target', 'label', 'class'];
         
         for (const target of possibleTargets) {
@@ -94,13 +92,9 @@ class DataLoader {
             }
         }
         
-        // Попробуем найти по частичному совпадению
         for (const header of headers) {
             const headerLower = header.toLowerCase().replace(/"/g, '');
-            if (headerLower.includes('activity') || 
-                headerLower.includes('target') ||
-                headerLower.includes('label') ||
-                headerLower.includes('class')) {
+            if (headerLower.includes('activity')) {
                 return header;
             }
         }
@@ -112,7 +106,7 @@ class DataLoader {
         const lines = text.trim().split(/\r?\n/).filter(line => line.trim());
         if (lines.length === 0) return [];
         
-        // Убираем кавычки из заголовков
+        // Обрабатываем заголовки - убираем кавычки
         const headers = lines[0].split(',').map(s => s.trim().replace(/"/g, ''));
         const result = [];
 
@@ -120,12 +114,10 @@ class DataLoader {
             const line = lines[i].trim();
             if (!line) continue;
             
-            // Убираем кавычки из данных
             const cells = line.split(',').map(v => v.trim().replace(/"/g, ''));
             const row = {};
             
             headers.forEach((header, index) => {
-                // Если ячеек меньше чем заголовков, заполняем недостающие нулями
                 row[header] = cells[index] || '0';
             });
             
@@ -146,16 +138,15 @@ class DataLoader {
         this.raw.forEach((row, index) => {
             const features = [];
             let targetValue = null;
-            let hasValidData = false;
             
             Object.keys(row).forEach(key => {
                 const value = row[key];
                 
                 if (key === this.schema.target) {
-                    // Target value - пробуем разные варианты парсинга
+                    // Target value - преобразуем в число
                     let num = parseFloat(value);
                     
-                    // Если не число, пробуем преобразовать текстовые значения
+                    // Если не число, пробуем другие форматы
                     if (isNaN(num)) {
                         const lowerValue = value.toLowerCase();
                         if (lowerValue === 'true' || lowerValue === 'yes' || lowerValue === '1') {
@@ -169,40 +160,24 @@ class DataLoader {
                         }
                     }
                     
-                    if (!isNaN(num)) {
-                        targetValue = num;
-                        hasValidData = true;
-                    }
+                    targetValue = num;
                 } else {
                     // Feature value
                     const num = parseFloat(value);
-                    if (!isNaN(num)) {
-                        features.push(num);
-                        hasValidData = true;
-                    } else {
-                        features.push(0); // Заменяем NaN на 0
-                    }
+                    features.push(isNaN(num) ? 0 : num);
                 }
             });
             
-            if (targetValue !== null && features.length > 0 && hasValidData) {
+            if (targetValue !== null && features.length > 0) {
                 X.push(features);
                 y.push(targetValue);
-            } else {
-                if (index < 5) { // Логируем только первые несколько ошибок
-                    this.log(`Skipping row ${index} - invalid data. Target: ${targetValue}, Features: ${features.length}`);
-                }
             }
         });
 
         this.log(`Processed ${X.length} valid samples out of ${this.raw.length} total`);
         
         if (X.length === 0) {
-            // Покажем пример данных для отладки
-            this.log(`First row sample: ${JSON.stringify(this.raw[0])}`);
-            this.log(`Target column: ${this.schema.target}`);
-            this.log(`Target value in first row: ${this.raw[0][this.schema.target]}`);
-            throw new Error('No valid samples found after processing. Check data format.');
+            throw new Error('No valid samples found after processing');
         }
 
         this.X = X;
@@ -225,12 +200,6 @@ class DataLoader {
             return acc;
         }, {});
         this.log(`Target distribution: ${JSON.stringify(targetCounts)}`);
-        
-        // Если все значения одинаковые, это проблема
-        const uniqueValues = Object.keys(targetCounts);
-        if (uniqueValues.length === 1) {
-            this.log(`WARNING: All target values are ${uniqueValues[0]}. This may indicate a problem with data parsing.`);
-        }
         
         return { 
             featNames: Object.keys(this.schema.features),
@@ -271,7 +240,6 @@ class DataLoader {
 function buildModel(arch, inputDim, learningRate = 0.001) {
     const model = tf.sequential();
     
-    // Простая архитектура для избежания сложностей
     model.add(tf.layers.dense({
         inputShape: [inputDim],
         units: 32,
@@ -291,7 +259,6 @@ function buildModel(arch, inputDim, learningRate = 0.001) {
 }
 
 async function fitModel(model, X, Y, epochs = 5, batchSize = 32, logFn = console.log) {
-    // Добавляем проверки данных
     if (!X || X.length === 0) {
         throw new Error('Training data X is empty');
     }
@@ -302,16 +269,14 @@ async function fitModel(model, X, Y, epochs = 5, batchSize = 32, logFn = console
     logFn(`Training data shape: X=[${X.length}, ${X[0].length}], Y=[${Y.length}]`);
     
     try {
-        // Преобразуем данные в правильный формат для TensorFlow
         const xArray = [];
         const yArray = [];
         
         for (let i = 0; i < X.length; i++) {
             xArray.push(X[i]);
-            yArray.push([Y[i]]); // Преобразуем в 2D массив [[value], [value], ...]
+            yArray.push([Y[i]]);
         }
         
-        // Создаем тензоры с явным указанием формы
         const xs = tf.tensor2d(xArray, [xArray.length, xArray[0].length]);
         const ys = tf.tensor2d(yArray, [yArray.length, 1]);
         
@@ -359,7 +324,6 @@ function evaluateAccuracy(model, X, Y, threshold = 0.5) {
     }
     
     try {
-        // Преобразуем данные в правильный формат
         const xArray = [];
         const yArray = [];
         
@@ -408,14 +372,16 @@ async function onTrain() {
         log(`Features count: ${featNames.length}`);
         log(`Data info: ${dataInfo.totalSamples} samples, ${dataInfo.featuresCount} features`);
 
-        const arch = $('arch').value;
+        const arch = $('arch');
+        const archValue = arch ? arch.value : 'dense';
+        
         setStatus('Building model...');
         
         if (MODEL) {
             MODEL.dispose();
         }
         
-        MODEL = buildModel(arch, dataInfo.featuresCount);
+        MODEL = buildModel(archValue, dataInfo.featuresCount);
         log(`Model parameters: ${MODEL.countParams().toLocaleString()}`);
 
         setStatus('Training model...');
@@ -431,21 +397,25 @@ async function onTrain() {
         
         if (testX.length > 0) {
             const acc = evaluateAccuracy(MODEL, testX, testY);
-            $('testAcc').textContent = `${(acc * 100).toFixed(1)}%`;
+            const testAccEl = $('testAcc');
+            if (testAccEl) {
+                testAccEl.textContent = `${(acc * 100).toFixed(1)}%`;
+            }
             log(`Test accuracy: ${(acc * 100).toFixed(1)}%`);
         } else {
             log('No test data available');
-            $('testAcc').textContent = 'N/A';
+            const testAccEl = $('testAcc');
+            if (testAccEl) {
+                testAccEl.textContent = 'N/A';
+            }
         }
         
         READY = true;
         
-        // Создаем простую форму для предсказания
-        createSimplePredictionForm();
-        
-        // Исправляем ошибку - убираем обращение к несуществующему элементу
-        if ($('simCard')) {
-            $('simCard').style.opacity = '1';
+        // Обновляем UI для предсказаний
+        const simCard = $('simCard');
+        if (simCard) {
+            simCard.style.opacity = '1';
         }
         
         setStatus('Ready');
@@ -460,30 +430,6 @@ async function onTrain() {
     }
 }
 
-function createSimplePredictionForm() {
-    const simGrid = $('simGrid');
-    if (!simGrid) return;
-    
-    simGrid.innerHTML = '';
-    
-    if (!LOADER || !LOADER.schema) {
-        simGrid.innerHTML = '<p>Model trained. Use predict button for random prediction.</p>';
-        return;
-    }
-    
-    const features = Object.keys(LOADER.schema.features);
-    if (features.length > 0) {
-        simGrid.innerHTML = `
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
-                <p><strong>Model Info:</strong></p>
-                <p>Features: ${features.length}</p>
-                <p>Input dimension: ${LOADER.X[0].length}</p>
-                <p>Click "Predict Risk" to test the model</p>
-            </div>
-        `;
-    }
-}
-
 function onPredict() {
     if (!READY || !MODEL) {
         log('Please train the model first');
@@ -493,7 +439,6 @@ function onPredict() {
     try {
         setStatus('Predicting...');
         
-        // Создаем случайный вход на основе статистики тренировочных данных
         const testX = LOADER.getTest();
         if (testX.length > 0) {
             const randomIndex = Math.floor(Math.random() * testX.length);
@@ -506,7 +451,6 @@ function onPredict() {
             if (riskOut) {
                 riskOut.textContent = prediction.toFixed(4);
                 
-                // Определяем цвет риска
                 let riskClass = 'green';
                 if (prediction > 0.7) riskClass = 'red';
                 else if (prediction > 0.3) riskClass = 'yellow';
@@ -516,7 +460,6 @@ function onPredict() {
             
             log(`Predicted risk: ${prediction.toFixed(4)} (actual: ${actualValue})`);
         } else {
-            // Fallback - случайное предсказание
             const randomPrediction = Math.random().toFixed(4);
             const riskOut = $('riskOut');
             
@@ -531,7 +474,7 @@ function onPredict() {
         setStatus('Ready');
         
     } catch (error) {
-        log('Prediction error: ' + error.message);
+        log('Prediction error: ' + e.message);
         setStatus('Error');
     }
 }
@@ -551,7 +494,6 @@ function initApp() {
     console.log('Initializing app...');
     
     try {
-        // Устанавливаем версию TF.js
         const tfVersion = tf?.version?.core || 'Loaded';
         const tfverElement = $('tfver');
         if (tfverElement) {
