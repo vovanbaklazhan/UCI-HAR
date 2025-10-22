@@ -2,16 +2,15 @@ export class DataLoader {
   constructor(logFn, statusFn) {
     this.log = logFn || console.log;
     this.setStatus = statusFn || (() => {});
-    this.raw = null;  // [{col:val,...}]
-    this.schema = null;  // { features: {name,type,values?,stats?}, target:'Activity' }
-    this.encoders = {};  // {catKey: [values...]}
-    this.scaler = { type: 'minmax', stats: {} };  // by feature index
+    this.raw = null;
+    this.schema = null;
+    this.encoders = {};
+    this.scaler = { type: 'minmax', stats: {} };
     this.X = null; this.y = null;
     this.idx = { train: [], test: [] };
     this.featNames = [];
   }
 
-  // Загрузка CSV
   async loadCSV(path = './data/train.csv') {
     this.setStatus('loading data…');
     this.log(`Fetching ${path}`);
@@ -23,22 +22,18 @@ export class DataLoader {
     this.raw = this.#parseCSV(text);
     if (!this.raw.length) throw new Error('CSV is empty.');
 
-    // Логируем заголовки
     const headers = Object.keys(this.raw[0]);
     this.log('Raw Headers:', headers);
 
-    // Очистим заголовки от пробелов и невидимых символов
     const cleanedHeaders = headers.map(header => header.trim().toLowerCase());
     this.log('Cleaned Headers:', cleanedHeaders);
 
-    // Ищем целевой столбец (приводим к нижнему регистру для сравнения)
     const target = 'activity';
     const targetFound = cleanedHeaders.includes(target);
     
     if (!targetFound) {
-      // Если не нашли, выводим доступные заголовки для отладки
       this.log('Available headers:', cleanedHeaders);
-      throw new Error(`Target column "${target}" not found in the dataset. Available columns: ${cleanedHeaders.join(', ')}`);
+      throw new Error(`Target column "${target}" not found. Available: ${cleanedHeaders.join(', ')}`);
     }
 
     this.#inferSchema(target);
@@ -46,7 +41,6 @@ export class DataLoader {
     this.log(`Loaded rows=${this.raw.length}`);
   }
 
-  // Парсинг CSV
   #parseCSV(text) {
     const [h, ...lines] = text.trim().split(/\r?\n/);
     const headers = h.split(',').map(s => s.trim());
@@ -58,101 +52,129 @@ export class DataLoader {
     });
   }
 
-  // Преобразование строки в число
   #num(v) {
+    if (v === '' || v === null || v === undefined) return NaN;
     const n = Number(v);
     return Number.isFinite(n) ? n : NaN;
   }
 
-  // Определение схемы данных
   #inferSchema(target) {
     const features = {};
-    
-    // Используем оригинальные имена столбцов из raw данных
     const cols = Object.keys(this.raw[0]).filter(c => c.toLowerCase() !== target);
     
     for (const c of cols) {
       let type = 'numeric';
-      // Приводим к нижнему регистру для сравнения
       const colLower = c.toLowerCase();
-      if (['road_type', 'lighting', 'weather', 'time_of_day', 'road_signs_present', 'public_road', 'holiday', 'school_season']
-          .map(s => s.toLowerCase()).includes(colLower)) {
+      
+      // Определяем тип признака
+      if (['road_type', 'lighting', 'weather', 'time_of_day', 'road_signs_present', 
+           'public_road', 'holiday', 'school_season'].includes(colLower)) {
         type = 'categorical';
       }
-      if (['num_lanes', 'curvature', 'speed_limit', 'num_reported_accidents']
-          .map(s => s.toLowerCase()).includes(colLower)) {
-        type = 'numeric';
-      }
-
+      
       features[c] = { name: c, type };
     }
     
-    // Статистика по числовым признакам и значениям категориальных
+    // Собираем статистику и значения
     for (const [k, f] of Object.entries(features)) {
+      const values = this.raw.map(r => r[k]).filter(v => v !== '');
+      
       if (f.type === 'numeric') {
-        const arr = this.raw.map(r => this.#num(r[k])).filter(Number.isFinite);
-        if (arr.length === 0) {
-          f.stats = { min: 0, max: 0, mean: 0, std: 0 };
-        } else {
-          const min = Math.min(...arr), max = Math.max(...arr);
+        const arr = values.map(v => this.#num(v)).filter(v => !isNaN(v));
+        if (arr.length > 0) {
+          const min = Math.min(...arr);
+          const max = Math.max(...arr);
           const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-          const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
+          const std = Math.sqrt(arr.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / arr.length);
           f.stats = { min, max, mean, std };
+        } else {
+          f.stats = { min: 0, max: 1, mean: 0, std: 1 };
         }
       } else {
-        let vals = [...new Set(this.raw.map(r => String(r[k])).filter(v => v !== '').map(String))];
+        let vals = [...new Set(values.map(String))];
+        // Проверяем на boolean
         const lower = vals.map(v => v.toLowerCase());
-        if (lower.every(v => v === 'true' || v === 'false')) { 
-          f.type = 'boolean'; 
-          vals = ['True', 'False']; 
+        if (lower.every(v => v === 'true' || v === 'false' || v === '1' || v === '0')) {
+          f.type = 'boolean';
+          vals = ['true', 'false'];
+        } else {
+          f.values = vals.slice(0, 50); // Ограничиваем количество категорий
         }
-        f.values = vals.slice(0, 50);
       }
     }
     
     this.schema = { features, target };
   }
 
-  // Подготовка матриц для обучения
   prepareMatrices() {
     this.encoders = {}; 
     this.featNames = [];
     
-    // Строим энкодеры и featNames
+    // Строим энкодеры и имена признаков
     for (const [k, f] of Object.entries(this.schema.features)) {
       if (f.type === 'numeric' || f.type === 'boolean') { 
         this.featNames.push(k); 
       } else if (f.type === 'categorical') {
         this.encoders[k] = f.values || [];
-        for (const v of this.encoders[k]) this.featNames.push(`${k}__${v}`);
+        for (const v of this.encoders[k]) {
+          this.featNames.push(`${k}__${v}`);
+        }
       }
     }
 
     const X = [];
     const y = [];
+    const validIndices = []; // Индексы валидных строк
     
-    for (const r of this.raw) {
+    for (let i = 0; i < this.raw.length; i++) {
+      const r = this.raw[i];
       const row = [];
+      let valid = true;
       
-      // Преобразуем данные в формате row
+      // Обрабатываем признаки
       for (const [k, f] of Object.entries(this.schema.features)) {
+        const value = r[k];
+        
         if (f.type === 'numeric') {
-          row.push(this.#num(r[k]));
+          const numVal = this.#num(value);
+          if (isNaN(numVal)) {
+            valid = false;
+            break;
+          }
+          row.push(numVal);
         } else if (f.type === 'boolean') {
-          row.push(String(r[k]).toLowerCase() === 'true' ? 1 : 0);
-        } else {  // категориальные признаки — one-hot
+          const strVal = String(value).toLowerCase();
+          row.push(strVal === 'true' || strVal === '1' ? 1 : 0);
+        } else {
           const cats = this.encoders[k] || [];
-          for (const v of cats) row.push(String(r[k]) === v ? 1 : 0);
+          const strVal = String(value);
+          for (const v of cats) {
+            row.push(strVal === v ? 1 : 0);
+          }
         }
       }
-      X.push(row);
       
-      // Получаем значение целевого столбца (используем оригинальное имя)
-      const targetValue = r[Object.keys(r).find(key => key.toLowerCase() === this.schema.target)];
-      y.push([Number(targetValue)]);
+      // Обрабатываем целевую переменную
+      if (valid) {
+        const targetKey = Object.keys(r).find(key => key.toLowerCase() === this.schema.target);
+        const targetValue = r[targetKey];
+        const numTarget = this.#num(targetValue);
+        
+        if (!isNaN(numTarget)) {
+          X.push(row);
+          y.push([numTarget]);
+          validIndices.push(i);
+        }
+      }
     }
 
-    // Нормализация данных (MinMax)
+    this.log(`Valid samples: ${X.length}/${this.raw.length}`);
+    
+    if (X.length === 0) {
+      throw new Error('No valid samples found after processing');
+    }
+
+    // Нормализация
     this.scaler = { type: 'minmax', stats: {} };
     const numericIdx = [];
     let col = 0;
@@ -166,27 +188,23 @@ export class DataLoader {
       }
     }
 
+    // Вычисляем статистику для нормализации
     for (const c of numericIdx) {
-      const colVals = X.map(r => r[c]).filter(Number.isFinite);
-      if (colVals.length === 0) {
-        this.scaler.stats[c] = { min: 0, max: 0, mean: 0, std: 0 };
+      const colVals = X.map(r => r[c]).filter(v => !isNaN(v));
+      if (colVals.length > 0) {
+        const min = Math.min(...colVals);
+        const max = Math.max(...colVals);
+        this.scaler.stats[c] = { min, max };
       } else {
-        const min = Math.min(...colVals), max = Math.max(...colVals);
-        const mean = colVals.reduce((a, b) => a + b, 0) / Math.max(1, colVals.length);
-        const std = Math.sqrt(colVals.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (colVals.length - 1)));
-        this.scaler.stats[c] = { min, max, mean, std };
+        this.scaler.stats[c] = { min: 0, max: 1 };
       }
     }
 
-    // Применяем MinMax scaling
+    // Применяем нормализацию
     for (let i = 0; i < X.length; i++) {
       for (const c of numericIdx) {
         const st = this.scaler.stats[c];
         const v = X[i][c];
-        if (!Number.isFinite(v)) {
-          X[i][c] = 0;
-          continue;
-        }
         const d = (st.max - st.min) || 1;
         X[i][c] = (v - st.min) / d;
       }
@@ -195,29 +213,48 @@ export class DataLoader {
     this.X = X;
     this.y = y;
 
-    // Разделение на train/test (80/20)
+    // Разделение на train/test
     const idx = [...Array(X.length).keys()];
     this.#shuffle(idx, 2025);
     const nTr = Math.floor(idx.length * 0.8);
     this.idx.train = idx.slice(0, nTr);
     this.idx.test = idx.slice(nTr);
 
+    this.log(`Final dataset: ${X.length} samples, ${this.featNames.length} features`);
+    this.log(`First target values: ${y.slice(0, 5).map(arr => arr[0]).join(', ')}`);
+
     return { featNames: this.featNames };
   }
 
-  // Функции для получения данных
-  getTrain() { return this.idx.train.map(i => this.X[i]); }
-  getTrainY() { return this.idx.train.map(i => this.y[i]); }
-  getTest() { return this.idx.test.map(i => this.X[i]); }
-  getTestY() { return this.idx.test.map(i => this.y[i]); }
+  getTrain() { 
+    return this.idx.train.map(i => this.X[i]); 
+  }
+  
+  getTrainY() { 
+    return this.idx.train.map(i => this.y[i]); 
+  }
+  
+  getTest() { 
+    return this.idx.test.map(i => this.X[i]); 
+  }
+  
+  getTestY() { 
+    return this.idx.test.map(i => this.y[i]); 
+  }
 
-  // Перемешивание индексов с использованием случайного сидирования
+  // Добавляем недостающий метод
+  buildSimulationForm() {
+    this.log('buildSimulationForm called - placeholder method');
+    // Реализация этого метода зависит от требований UI
+    return document.createElement('div'); // Заглушка
+  }
+
   #shuffle(a, seed = 123) {
     let s = seed;
     const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
     for (let i = a.length - 1; i > 0; i--) {
       const j = Math.floor(rnd() * (i + 1));
-      [a[i],a[j]]=[a[j],a[i]];
+      [a[i], a[j]] = [a[j], a[i]];
     }
   }
 }
