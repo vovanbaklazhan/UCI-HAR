@@ -12,24 +12,34 @@ export class DataLoader {
     this.featNames = [];
   }
 
-  async loadCSV(paths = ['./data/train_1.csv', './data/train_2.csv', './data/train_3.csv']) {
+  async loadCSV(paths = [
+    'https://github.com/vovanbaklazhan/UCI-HAR/blob/main/data/train_1.csv',
+    'https://github.com/vovanbaklazhan/UCI-HAR/blob/main/data/train_2.csv',
+    'https://github.com/vovanbaklazhan/UCI-HAR/blob/main/data/train_3.csv'
+  ]) {
     this.setStatus('loading data…');
     this.log(`Fetching ${paths.join(', ')}`);
     this.raw = [];
-    
+
     // Загружаем данные из всех файлов
     for (let path of paths) {
-      const res = await fetch(path);
-      if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`);
-      const text = await res.text();
-      const data = this.#parseCSV(text);
-      if (!data.length) throw new Error(`CSV ${path} is empty.`);
-      this.raw = [...this.raw, ...data]; // Объединяем данные из всех файлов
+      try {
+        const res = await fetch(path);
+        if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`);
+        const text = await res.text();
+        const data = this.#parseCSV(text);
+        if (!data.length) throw new Error(`CSV ${path} is empty.`);
+        this.raw = [...this.raw, ...data]; // Объединяем данные из всех файлов
+        this.log(`Loaded ${data.length} rows from ${path}`);
+      } catch (e) {
+        this.log(`Error loading ${path}: ${e.message}`);
+        throw e;
+      }
     }
 
     this.#inferSchema();
     this.setStatus('data loaded');
-    this.log(`Loaded rows=${this.raw.length}`);
+    this.log(`Total rows loaded: ${this.raw.length}`);
   }
 
   #parseCSV(text) {
