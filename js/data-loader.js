@@ -12,38 +12,23 @@ export class DataLoader {
     this.featNames = [];
   }
 
-  // Загружаем данные из нескольких файлов
-  async loadCSV(paths = [
-    'https://vovanbaklazhan.github.io/UCI-HAR/data/train_1.csv',
-    'https://vovanbaklazhan.github.io/UCI-HAR/data/train_2.csv',
-    'https://vovanbaklazhan.github.io/UCI-HAR/data/train_3.csv'
-  ]) {
-    if (typeof paths === 'string') {
-      paths = [paths];  // Если передан один путь, преобразуем его в массив
-    }
-
-    if (!Array.isArray(paths)) {
-      throw new Error('Expected an array of paths.');
-    }
-
+  // Загружаем данные из одного файла
+  async loadCSV(path = 'https://vovanbaklazhan.github.io/UCI-HAR/data/train_1.csv') {
     this.setStatus('loading data…');
-    this.log(`Fetching ${paths.join(', ')}`);
+    this.log(`Fetching ${path}`);
     this.raw = [];
 
-    // Загружаем данные из всех файлов
-    for (let path of paths) {
-      try {
-        const res = await fetch(path);
-        if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`);
-        const text = await res.text();
-        const data = this.#parseCSV(text);
-        if (!data.length) throw new Error(`CSV ${path} is empty.`);
-        this.raw = [...this.raw, ...data]; // Объединяем данные из всех файлов
-        this.log(`Loaded ${data.length} rows from ${path}`);
-      } catch (e) {
-        this.log(`Error loading ${path}: ${e.message}`);
-        throw e;
-      }
+    try {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`);
+      const text = await res.text();
+      const data = this.#parseCSV(text);
+      if (!data.length) throw new Error(`CSV ${path} is empty.`);
+      this.raw = [...this.raw, ...data]; // Объединяем данные
+      this.log(`Loaded ${data.length} rows from ${path}`);
+    } catch (e) {
+      this.log(`Error loading ${path}: ${e.message}`);
+      throw e;
     }
 
     this.#inferSchema();
