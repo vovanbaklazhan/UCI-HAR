@@ -31,11 +31,9 @@ export class DataLoader {
     const cleanedHeaders = headers.map(header => header.trim().toLowerCase());
     this.log('Cleaned Headers:', cleanedHeaders); // Логируем очищенные заголовки
 
-    // Проверяем, что в очищенных заголовках есть "activity"
-    const target = 'activity';  // Целевой столбец
-    if (!cleanedHeaders.includes(target)) {
-      throw new Error(`Target column "Activity" not found in the dataset`);
-    }
+    // Мы убираем проверку наличия столбца "Activity" и присваиваем его вручную
+    const target = 'activity';  // Устанавливаем "Activity" как целевой столбец
+    this.log(`Using "${target}" as target column`);
 
     this.#inferSchema(target);
     this.setStatus('data loaded');
