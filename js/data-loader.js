@@ -73,38 +73,37 @@ export class DataLoader {
     return Number.isFinite(n) ? n : NaN;
   }
 
-  inferSchema() {
-    const target = 'Activity'; // Убедитесь, что это имя столбца соответствует точному названию в данных
-    const headers = Object.keys(this.raw[0]);
-    
-    // Логируем доступные столбцы
-    console.log('Available columns:', headers);
+inferSchema() {
+  const target = 'Activity'; // Убедитесь, что это имя столбца соответствует точному названию в данных
+  const headers = Object.keys(this.raw[0]);
+  
+  // Логируем доступные столбцы
+  console.log('Available columns:', headers);
 
-    if (!headers.includes(target)) {
-      throw new Error(`Target "${target}" not found`);
-    }
-
-    const features = {};
-    const cols = headers.filter(c => c !== target); // Исключаем целевой признак
-
-    for (const c of cols) {
-      let type = 'numeric';
-      features[c] = { name: c, type };
-    }
-
-    for (const [k, f] of Object.entries(features)) {
-      if (f.type === 'numeric') {
-        const arr = this.raw.map(r => this.num(r[k])).filter(Number.isFinite);
-        const min = Math.min(...arr), max = Math.max(...arr);
-        const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-        const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
-        f.stats = { min, max, mean, std };
-      }
-    }
-
-    this.schema = { features, target };
+  if (!headers.includes(target)) {
+    throw new Error(`Target "${target}" not found`);
   }
 
+  const features = {};
+  const cols = headers.filter(c => c !== target); // Исключаем целевой признак
+
+  for (const c of cols) {
+    let type = 'numeric';
+    features[c] = { name: c, type };
+  }
+
+  for (const [k, f] of Object.entries(features)) {
+    if (f.type === 'numeric') {
+      const arr = this.raw.map(r => this.num(r[k])).filter(Number.isFinite);
+      const min = Math.min(...arr), max = Math.max(...arr);
+      const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+      const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
+      f.stats = { min, max, mean, std };
+    }
+  }
+
+  this.schema = { features, target };
+}
   prepareMatrices() {
     this.encoders = {};
     this.featNames = [];
