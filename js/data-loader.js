@@ -18,6 +18,9 @@ export class DataLoader {
     'https://vovanbaklazhan.github.io/UCI-HAR/data/train_2.csv',
     'https://vovanbaklazhan.github.io/UCI-HAR/data/train_3.csv'
   ]) {
+    if (!Array.isArray(paths)) {
+      throw new Error('Expected an array of paths.');
+    }
     this.setStatus('loading data…');
     this.log(`Fetching ${paths.join(', ')}`);
     this.raw = [];
