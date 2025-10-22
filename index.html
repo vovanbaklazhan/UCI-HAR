@@ -4,39 +4,72 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UCI-HAR Risk Prediction</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <link rel="stylesheet" href="./style.css">
+    
+    <!-- TensorFlow.js с резервными CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+    <script>
+        // Проверка загрузки TensorFlow.js
+        window.addEventListener('load', function() {
+            if (typeof tf === 'undefined') {
+                console.log('Primary TF.js CDN failed, loading backup...');
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/@tensorflow/tfjs@4.22.0/dist/tf.min.js';
+                document.head.appendChild(script);
+                
+                script.onload = function() {
+                    console.log('Backup TF.js loaded successfully');
+                    if (typeof initApp === 'function') {
+                        initApp();
+                    }
+                };
+            } else {
+                console.log('TF.js loaded successfully');
+            }
+        });
+    </script>
 </head>
 <body>
     <div class="container">
-        <h1>UCI-HAR Risk Prediction</h1>
-        <div id="status">Status: ready</div>
+        <h1>🚗 UCI-HAR Risk Prediction</h1>
+        <div id="status">Status: Loading TensorFlow.js...</div>
+        
         <div class="card">
-            <h2>Model</h2>
+            <h2>🧠 Model Configuration</h2>
             <label>Architecture:
                 <select id="arch">
                     <option value="dense">Dense Network</option>
                     <option value="cnn1d">CNN 1D</option>
                 </select>
             </label>
-            <button id="btnTrain">Train Model</button>
-            <div>Test Accuracy: <span id="testAcc">—</span></div>
+            <button id="btnTrain">🚀 Train Model</button>
+            <div style="margin-top: 15px;">
+                <strong>Test Accuracy:</strong> <span id="testAcc">—</span>
+            </div>
         </div>
 
         <div class="card">
-            <h2>Training Log</h2>
+            <h2>📊 Training Log</h2>
             <pre id="log">—</pre>
         </div>
 
         <div class="card" id="simCard" style="opacity:0.5">
-            <h2>Simulation</h2>
-            <div id="simGrid"></div>
-            <button id="btnPredict" disabled>Predict Risk</button>
-            <div>Risk: <span id="riskOut" class="risk">—</span></div>
+            <h2>🔮 Risk Prediction</h2>
+            <div id="simGrid">
+                <p>Train the model first to enable prediction</p>
+            </div>
+            <button id="btnPredict" disabled>🎯 Predict Risk</button>
+            <div style="margin-top: 15px;">
+                <strong>Risk Level:</strong> <span id="riskOut" class="risk">—</span>
+            </div>
+        </div>
+
+        <div class="card" style="text-align: center; background: #f8f9fa;">
+            <p>TF.js Version: <span id="tfver">Loading...</span></p>
         </div>
     </div>
 
-    <!-- Включаем все скрипты в одном файле -->
-    <script src="app.js"></script>
+    <!-- Подключаем app.js -->
+    <script src="./app.js"></script>
 </body>
 </html>
