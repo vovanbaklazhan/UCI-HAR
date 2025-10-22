@@ -45,7 +45,7 @@ class DataLoader {
             
             const headers = Object.keys(this.raw[0]);
             this.log(`Loaded ${this.raw.length} rows with ${headers.length} columns`);
-            this.log(`Headers: ${headers.join(', ')}`);
+            this.log(`First few headers: ${headers.slice(0, 10).join(', ')}...`);
             
             // Найдем целевую колонку - попробуем разные варианты
             let targetColumn = this.findTargetColumn(headers);
@@ -57,6 +57,10 @@ class DataLoader {
             }
             
             this.log(`Using target column: "${targetColumn}"`);
+            
+            // Проверим значения в целевой колонке
+            const targetValues = this.raw.map(row => row[targetColumn]).slice(0, 10);
+            this.log(`First 10 target values: ${targetValues.join(', ')}`);
             
             // Создаем простую схему
             this.schema = {
@@ -92,10 +96,11 @@ class DataLoader {
         
         // Попробуем найти по частичному совпадению
         for (const header of headers) {
-            if (header.toLowerCase().includes('activity') || 
-                header.toLowerCase().includes('target') ||
-                header.toLowerCase().includes('label') ||
-                header.toLowerCase().includes('class')) {
+            const headerLower = header.toLowerCase().replace(/"/g, '');
+            if (headerLower.includes('activity') || 
+                headerLower.includes('target') ||
+                headerLower.includes('label') ||
+                headerLower.includes('class')) {
                 return header;
             }
         }
@@ -107,14 +112,16 @@ class DataLoader {
         const lines = text.trim().split(/\r?\n/).filter(line => line.trim());
         if (lines.length === 0) return [];
         
-        const headers = lines[0].split(',').map(s => s.trim());
+        // Убираем кавычки из заголовков
+        const headers = lines[0].split(',').map(s => s.trim().replace(/"/g, ''));
         const result = [];
 
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
             
-            const cells = line.split(',').map(v => v.trim());
+            // Убираем кавычки из данных
+            const cells = line.split(',').map(v => v.trim().replace(/"/g, ''));
             const row = {};
             
             headers.forEach((header, index) => {
@@ -145,8 +152,23 @@ class DataLoader {
                 const value = row[key];
                 
                 if (key === this.schema.target) {
-                    // Target value
-                    const num = parseFloat(value);
+                    // Target value - пробуем разные варианты парсинга
+                    let num = parseFloat(value);
+                    
+                    // Если не число, пробуем преобразовать текстовые значения
+                    if (isNaN(num)) {
+                        const lowerValue = value.toLowerCase();
+                        if (lowerValue === 'true' || lowerValue === 'yes' || lowerValue === '1') {
+                            num = 1;
+                        } else if (lowerValue === 'false' || lowerValue === 'no' || lowerValue === '0') {
+                            num = 0;
+                        } else {
+                            // Пробуем извлечь число из строки
+                            const match = value.match(/\d+/);
+                            num = match ? parseInt(match[0]) : 0;
+                        }
+                    }
+                    
                     if (!isNaN(num)) {
                         targetValue = num;
                         hasValidData = true;
@@ -167,7 +189,9 @@ class DataLoader {
                 X.push(features);
                 y.push(targetValue);
             } else {
-                this.log(`Skipping row ${index} - invalid data`);
+                if (index < 5) { // Логируем только первые несколько ошибок
+                    this.log(`Skipping row ${index} - invalid data. Target: ${targetValue}, Features: ${features.length}`);
+                }
             }
         });
 
@@ -201,6 +225,12 @@ class DataLoader {
             return acc;
         }, {});
         this.log(`Target distribution: ${JSON.stringify(targetCounts)}`);
+        
+        // Если все значения одинаковые, это проблема
+        const uniqueValues = Object.keys(targetCounts);
+        if (uniqueValues.length === 1) {
+            this.log(`WARNING: All target values are ${uniqueValues[0]}. This may indicate a problem with data parsing.`);
+        }
         
         return { 
             featNames: Object.keys(this.schema.features),
@@ -412,8 +442,11 @@ async function onTrain() {
         
         // Создаем простую форму для предсказания
         createSimplePredictionForm();
-        $('simFs').disabled = false;
-        $('simCard').style.opacity = '1';
+        
+        // Исправляем ошибку - убираем обращение к несуществующему элементу
+        if ($('simCard')) {
+            $('simCard').style.opacity = '1';
+        }
         
         setStatus('Ready');
         log('Training completed successfully!');
@@ -429,6 +462,8 @@ async function onTrain() {
 
 function createSimplePredictionForm() {
     const simGrid = $('simGrid');
+    if (!simGrid) return;
+    
     simGrid.innerHTML = '';
     
     if (!LOADER || !LOADER.schema) {
@@ -468,14 +503,16 @@ function onPredict() {
             const prediction = predictOne(MODEL, randomSample);
             const riskOut = $('riskOut');
             
-            riskOut.textContent = prediction.toFixed(4);
-            
-            // Определяем цвет риска
-            let riskClass = 'green';
-            if (prediction > 0.7) riskClass = 'red';
-            else if (prediction > 0.3) riskClass = 'yellow';
-            
-            riskOut.className = 'risk ' + riskClass;
+            if (riskOut) {
+                riskOut.textContent = prediction.toFixed(4);
+                
+                // Определяем цвет риска
+                let riskClass = 'green';
+                if (prediction > 0.7) riskClass = 'red';
+                else if (prediction > 0.3) riskClass = 'yellow';
+                
+                riskOut.className = 'risk ' + riskClass;
+            }
             
             log(`Predicted risk: ${prediction.toFixed(4)} (actual: ${actualValue})`);
         } else {
@@ -483,8 +520,10 @@ function onPredict() {
             const randomPrediction = Math.random().toFixed(4);
             const riskOut = $('riskOut');
             
-            riskOut.textContent = randomPrediction;
-            riskOut.className = 'risk ' + (randomPrediction < 0.5 ? 'green' : 'red');
+            if (riskOut) {
+                riskOut.textContent = randomPrediction;
+                riskOut.className = 'risk ' + (randomPrediction < 0.5 ? 'green' : 'red');
+            }
             
             log(`Random prediction: ${randomPrediction} (no test data available)`);
         }
@@ -498,9 +537,13 @@ function onPredict() {
 }
 
 function disable(disabled) {
-    $('btnTrain').disabled = disabled;
-    $('arch').disabled = disabled;
-    $('btnPredict').disabled = disabled || !READY;
+    const btnTrain = $('btnTrain');
+    const arch = $('arch');
+    const btnPredict = $('btnPredict');
+    
+    if (btnTrain) btnTrain.disabled = disabled;
+    if (arch) arch.disabled = disabled;
+    if (btnPredict) btnPredict.disabled = disabled || !READY;
 }
 
 // Инициализация приложения
@@ -510,18 +553,25 @@ function initApp() {
     try {
         // Устанавливаем версию TF.js
         const tfVersion = tf?.version?.core || 'Loaded';
-        $('tfver').textContent = tfVersion;
+        const tfverElement = $('tfver');
+        if (tfverElement) {
+            tfverElement.textContent = tfVersion;
+        }
         
         setStatus('Ready');
-        $('btnTrain').onclick = onTrain;
-        $('btnPredict').onclick = onPredict;
+        
+        const btnTrain = $('btnTrain');
+        const btnPredict = $('btnPredict');
+        
+        if (btnTrain) btnTrain.onclick = onTrain;
+        if (btnPredict) btnPredict.onclick = onPredict;
         
         disable(false);
         log('Application ready. Click "Train Model" to start.');
         
     } catch (error) {
         console.error('Initialization error:', error);
-        $('status').textContent = 'Status: Initialization failed';
+        setStatus('Initialization failed');
         log('Failed to initialize: ' + error.message);
     }
 }
