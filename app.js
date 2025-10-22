@@ -45,7 +45,6 @@ class DataLoader {
             
             const headers = Object.keys(this.raw[0]);
             this.log(`Loaded ${this.raw.length} rows with ${headers.length} columns`);
-            this.log(`First row sample: ${JSON.stringify(Object.keys(this.raw[0]))}`);
             
             // Автоматически определяем target колонку
             let targetColumn = 'Activity';
@@ -130,7 +129,7 @@ class DataLoader {
             
             if (targetValue !== null && features.length > 0) {
                 X.push(features);
-                y.push([targetValue]);
+                y.push(targetValue); // Сохраняем как число, не массив
             }
         });
 
@@ -156,8 +155,7 @@ class DataLoader {
         
         // Логируем распределение целевых значений
         const targetCounts = y.reduce((acc, val) => {
-            const label = val[0];
-            acc[label] = (acc[label] || 0) + 1;
+            acc[val] = (acc[val] || 0) + 1;
             return acc;
         }, {});
         this.log(`Target distribution: ${JSON.stringify(targetCounts)}`);
@@ -201,28 +199,13 @@ class DataLoader {
 function buildModel(arch, inputDim, learningRate = 0.001) {
     const model = tf.sequential();
     
-    if (arch === 'cnn1d') {
-        // Для CNN нам нужно преобразовать данные в 3D тензор [samples, timesteps, features]
-        model.add(tf.layers.conv1d({
-            inputShape: [inputDim, 1],
-            filters: 8,
-            kernelSize: 3,
-            activation: 'relu'
-        }));
-        model.add(tf.layers.maxPooling1d({ poolSize: 2 }));
-        model.add(tf.layers.flatten());
-    } else {
-        // Стандартная полносвязная сеть
-        model.add(tf.layers.dense({
-            inputShape: [inputDim],
-            units: 64,
-            activation: 'relu'
-        }));
-        model.add(tf.layers.dropout({ rate: 0.3 }));
-    }
+    // Простая архитектура для избежания сложностей
+    model.add(tf.layers.dense({
+        inputShape: [inputDim],
+        units: 32,
+        activation: 'relu'
+    }));
     
-    model.add(tf.layers.dense({ units: 32, activation: 'relu' }));
-    model.add(tf.layers.dropout({ rate: 0.3 }));
     model.add(tf.layers.dense({ units: 16, activation: 'relu' }));
     model.add(tf.layers.dense({ units: 1, activation: 'sigmoid' }));
     
@@ -235,7 +218,7 @@ function buildModel(arch, inputDim, learningRate = 0.001) {
     return model;
 }
 
-async function fitModel(model, X, Y, epochs = 10, batchSize = 32, logFn = console.log) {
+async function fitModel(model, X, Y, epochs = 5, batchSize = 32, logFn = console.log) {
     // Добавляем проверки данных
     if (!X || X.length === 0) {
         throw new Error('Training data X is empty');
@@ -247,26 +230,35 @@ async function fitModel(model, X, Y, epochs = 10, batchSize = 32, logFn = consol
     logFn(`Training data shape: X=[${X.length}, ${X[0].length}], Y=[${Y.length}]`);
     
     try {
-        // Явно указываем shape для тензоров
-        const xs = tf.tensor2d(X, [X.length, X[0].length]);
-        const ys = tf.tensor2d(Y, [Y.length, 1]);
+        // Преобразуем данные в правильный формат для TensorFlow
+        const xArray = [];
+        const yArray = [];
         
-        const history = await model.fit(xs, ys, {
+        for (let i = 0; i < X.length; i++) {
+            xArray.push(X[i]);
+            yArray.push([Y[i]]); // Преобразуем в 2D массив [[value], [value], ...]
+        }
+        
+        // Создаем тензоры с явным указанием формы
+        const xs = tf.tensor2d(xArray, [xArray.length, xArray[0].length]);
+        const ys = tf.tensor2d(yArray, [yArray.length, 1]);
+        
+        logFn(`Tensor shapes - X: [${xs.shape}], Y: [${ys.shape}]`);
+        
+        await model.fit(xs, ys, {
             epochs: epochs,
             batchSize: Math.min(batchSize, X.length),
             validationSplit: 0.2,
             verbose: 0,
             callbacks: {
                 onEpochEnd: (epoch, logs) => {
-                    logFn(`Epoch ${epoch + 1}/${epochs} - loss: ${logs.loss.toFixed(4)}, acc: ${logs.acc.toFixed(4)}, val_loss: ${logs.val_loss.toFixed(4)}, val_acc: ${logs.val_acc.toFixed(4)}`);
+                    logFn(`Epoch ${epoch + 1}/${epochs} - loss: ${logs.loss.toFixed(4)}, acc: ${logs.acc.toFixed(4)}`);
                 }
             }
         });
         
         xs.dispose();
         ys.dispose();
-        
-        return history;
         
     } catch (error) {
         logFn(`Error during training: ${error.message}`);
@@ -295,14 +287,23 @@ function evaluateAccuracy(model, X, Y, threshold = 0.5) {
     }
     
     try {
-        const xs = tf.tensor2d(X, [X.length, X[0].length]);
+        // Преобразуем данные в правильный формат
+        const xArray = [];
+        const yArray = [];
+        
+        for (let i = 0; i < X.length; i++) {
+            xArray.push(X[i]);
+            yArray.push([Y[i]]);
+        }
+        
+        const xs = tf.tensor2d(xArray, [xArray.length, xArray[0].length]);
         const preds = model.predict(xs);
         const predictions = Array.from(preds.dataSync());
         
         let correct = 0;
         for (let i = 0; i < predictions.length; i++) {
             const pred = predictions[i] >= threshold ? 1 : 0;
-            const actual = Y[i][0];
+            const actual = Y[i];
             if (pred === actual) correct++;
         }
         
@@ -350,7 +351,7 @@ async function onTrain() {
         const trainY = LOADER.getTrainY();
         
         log(`Starting training with ${trainX.length} samples`);
-        await fitModel(MODEL, trainX, trainY, 10, 32, log);
+        await fitModel(MODEL, trainX, trainY, 5, 32, log);
 
         setStatus('Testing model...');
         const testX = LOADER.getTest();
@@ -420,7 +421,7 @@ function onPredict() {
         if (testX.length > 0) {
             const randomIndex = Math.floor(Math.random() * testX.length);
             const randomSample = testX[randomIndex];
-            const actualValue = LOADER.getTestY()[randomIndex][0];
+            const actualValue = LOADER.getTestY()[randomIndex];
             
             const prediction = predictOne(MODEL, randomSample);
             const riskOut = $('riskOut');
