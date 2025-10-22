@@ -1,10 +1,9 @@
-// js/data-loader.js
 export class DataLoader {
   constructor(logFn, statusFn) {
     this.log = logFn || console.log;
     this.setStatus = statusFn || (() => {});
     this.raw = null;  // [{col:val,...}]
-    this.schema = null;  // { features: {name,type,values?,stats?}, target:'accident_risk' }
+    this.schema = null;  // { features: {name,type,values?,stats?}, target:'Activity' }
     this.encoders = {};  // {catKey: [values...]}
     this.scaler = { type: 'minmax', stats: {} };  // by feature index
     this.X = null; this.y = null;
@@ -49,7 +48,7 @@ export class DataLoader {
 
   // Определение схемы данных
   #inferSchema() {
-    const target = 'accident_risk';  // Целевой столбец
+    const target = 'Activity';  // Целевой столбец
     if (!(target in this.raw[0])) throw new Error(`Target "${target}" not found`);
     
     const knownCat = new Set(['road_type', 'lighting', 'weather', 'time_of_day', 'road_signs_present', 'public_road', 'holiday', 'school_season']);
