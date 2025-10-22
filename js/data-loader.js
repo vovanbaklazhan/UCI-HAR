@@ -55,7 +55,7 @@ export class DataLoader {
 
     return lines.map((line, idx) => {
       const cells = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g).map(v => v.replace(/^"(.*)"$/, '$1').trim());
-      
+
       const o = {};
       headers.forEach((k, i) => {
         o[k] = cells[i] ?? '';
