@@ -15,58 +15,71 @@ export class DataLoader {
     this.setStatus('loading data…');
     this.log(`Fetching ${path}`);
     
-    const res = await fetch(path);
-    if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`);
-    
-    const text = await res.text();
-    this.raw = this.#parseCSV(text);
-    if (!this.raw.length) throw new Error('CSV is empty.');
+    try {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`);
+      
+      const text = await res.text();
+      this.raw = this.parseCSV(text);
+      if (!this.raw.length) throw new Error('CSV is empty.');
 
-    const headers = Object.keys(this.raw[0]);
-    this.log('Raw Headers:', headers);
+      const headers = Object.keys(this.raw[0]);
+      this.log('Raw Headers:', headers);
 
-    const cleanedHeaders = headers.map(header => header.trim().toLowerCase());
-    this.log('Cleaned Headers:', cleanedHeaders);
+      const cleanedHeaders = headers.map(header => header.trim().toLowerCase());
+      this.log('Cleaned Headers:', cleanedHeaders);
 
-    const target = 'activity';
-    const targetFound = cleanedHeaders.includes(target);
-    
-    if (!targetFound) {
-      this.log('Available headers:', cleanedHeaders);
-      throw new Error(`Target column "${target}" not found. Available: ${cleanedHeaders.join(', ')}`);
+      const target = 'activity';
+      const targetFound = cleanedHeaders.includes(target);
+      
+      if (!targetFound) {
+        this.log('Available headers:', cleanedHeaders);
+        throw new Error(`Target column "${target}" not found. Available: ${cleanedHeaders.join(', ')}`);
+      }
+
+      this.inferSchema(target);
+      this.setStatus('data loaded');
+      this.log(`Loaded rows=${this.raw.length}`);
+    } catch (error) {
+      this.log('Error loading CSV: ' + error.message);
+      throw error;
     }
-
-    this.#inferSchema(target);
-    this.setStatus('data loaded');
-    this.log(`Loaded rows=${this.raw.length}`);
   }
 
-  #parseCSV(text) {
-    const [h, ...lines] = text.trim().split(/\r?\n/);
-    const headers = h.split(',').map(s => s.trim());
+  parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length === 0) return [];
+    
+    const headers = lines[0].split(',').map(s => s.trim());
+    this.log('CSV Headers:', headers);
 
-    return lines.map(line => {
+    return lines.slice(1).map(line => {
       const cells = line.split(',').map(v => v.trim());
-      const o = {}; headers.forEach((k, i) => o[k] = cells[i] ?? '');
+      const o = {};
+      headers.forEach((k, i) => {
+        o[k] = cells[i] ?? '';
+      });
       return o;
-    });
+    }).filter(row => Object.keys(row).length > 0);
   }
 
-  #num(v) {
+  num(v) {
     if (v === '' || v === null || v === undefined) return NaN;
     const n = Number(v);
     return Number.isFinite(n) ? n : NaN;
   }
 
-  #inferSchema(target) {
+  inferSchema(target) {
     const features = {};
-    const cols = Object.keys(this.raw[0]).filter(c => c.toLowerCase() !== target);
+    const firstRow = this.raw[0];
+    if (!firstRow) return;
+    
+    const cols = Object.keys(firstRow).filter(c => c.toLowerCase() !== target);
     
     for (const c of cols) {
       let type = 'numeric';
       const colLower = c.toLowerCase();
       
-      // Определяем тип признака
       if (['road_type', 'lighting', 'weather', 'time_of_day', 'road_signs_present', 
            'public_road', 'holiday', 'school_season'].includes(colLower)) {
         type = 'categorical';
@@ -75,12 +88,11 @@ export class DataLoader {
       features[c] = { name: c, type };
     }
     
-    // Собираем статистику и значения
     for (const [k, f] of Object.entries(features)) {
       const values = this.raw.map(r => r[k]).filter(v => v !== '');
       
       if (f.type === 'numeric') {
-        const arr = values.map(v => this.#num(v)).filter(v => !isNaN(v));
+        const arr = values.map(v => this.num(v)).filter(v => !isNaN(v));
         if (arr.length > 0) {
           const min = Math.min(...arr);
           const max = Math.max(...arr);
@@ -91,26 +103,29 @@ export class DataLoader {
           f.stats = { min: 0, max: 1, mean: 0, std: 1 };
         }
       } else {
-        let vals = [...new Set(values.map(String))];
-        // Проверяем на boolean
+        let vals = [...new Set(values.map(String))].filter(v => v !== '');
         const lower = vals.map(v => v.toLowerCase());
         if (lower.every(v => v === 'true' || v === 'false' || v === '1' || v === '0')) {
           f.type = 'boolean';
           vals = ['true', 'false'];
         } else {
-          f.values = vals.slice(0, 50); // Ограничиваем количество категорий
+          f.values = vals.slice(0, 50);
         }
       }
     }
     
     this.schema = { features, target };
+    this.log('Schema inferred:', Object.keys(features));
   }
 
   prepareMatrices() {
+    if (!this.schema) {
+      throw new Error('Schema not available. Call loadCSV first.');
+    }
+
     this.encoders = {}; 
     this.featNames = [];
     
-    // Строим энкодеры и имена признаков
     for (const [k, f] of Object.entries(this.schema.features)) {
       if (f.type === 'numeric' || f.type === 'boolean') { 
         this.featNames.push(k); 
@@ -124,24 +139,22 @@ export class DataLoader {
 
     const X = [];
     const y = [];
-    const validIndices = []; // Индексы валидных строк
     
     for (let i = 0; i < this.raw.length; i++) {
       const r = this.raw[i];
       const row = [];
       let valid = true;
       
-      // Обрабатываем признаки
       for (const [k, f] of Object.entries(this.schema.features)) {
-        const value = r[k];
+        const value = r[k] || '';
         
         if (f.type === 'numeric') {
-          const numVal = this.#num(value);
+          const numVal = this.num(value);
           if (isNaN(numVal)) {
-            valid = false;
-            break;
+            row.push(0);
+          } else {
+            row.push(numVal);
           }
-          row.push(numVal);
         } else if (f.type === 'boolean') {
           const strVal = String(value).toLowerCase();
           row.push(strVal === 'true' || strVal === '1' ? 1 : 0);
@@ -154,16 +167,14 @@ export class DataLoader {
         }
       }
       
-      // Обрабатываем целевую переменную
-      if (valid) {
-        const targetKey = Object.keys(r).find(key => key.toLowerCase() === this.schema.target);
+      const targetKey = Object.keys(r).find(key => key.toLowerCase() === this.schema.target);
+      if (targetKey) {
         const targetValue = r[targetKey];
-        const numTarget = this.#num(targetValue);
+        const numTarget = this.num(targetValue);
         
         if (!isNaN(numTarget)) {
           X.push(row);
           y.push([numTarget]);
-          validIndices.push(i);
         }
       }
     }
@@ -174,7 +185,6 @@ export class DataLoader {
       throw new Error('No valid samples found after processing');
     }
 
-    // Нормализация
     this.scaler = { type: 'minmax', stats: {} };
     const numericIdx = [];
     let col = 0;
@@ -188,7 +198,6 @@ export class DataLoader {
       }
     }
 
-    // Вычисляем статистику для нормализации
     for (const c of numericIdx) {
       const colVals = X.map(r => r[c]).filter(v => !isNaN(v));
       if (colVals.length > 0) {
@@ -200,7 +209,6 @@ export class DataLoader {
       }
     }
 
-    // Применяем нормализацию
     for (let i = 0; i < X.length; i++) {
       for (const c of numericIdx) {
         const st = this.scaler.stats[c];
@@ -213,15 +221,18 @@ export class DataLoader {
     this.X = X;
     this.y = y;
 
-    // Разделение на train/test
     const idx = [...Array(X.length).keys()];
-    this.#shuffle(idx, 2025);
+    this.shuffle(idx, 2025);
     const nTr = Math.floor(idx.length * 0.8);
     this.idx.train = idx.slice(0, nTr);
     this.idx.test = idx.slice(nTr);
 
     this.log(`Final dataset: ${X.length} samples, ${this.featNames.length} features`);
-    this.log(`First target values: ${y.slice(0, 5).map(arr => arr[0]).join(', ')}`);
+    
+    if (y.length > 0) {
+      const uniqueTargets = [...new Set(y.flat())];
+      this.log(`Unique target values: ${uniqueTargets.join(', ')}`);
+    }
 
     return { featNames: this.featNames };
   }
@@ -242,14 +253,7 @@ export class DataLoader {
     return this.idx.test.map(i => this.y[i]); 
   }
 
-  // Добавляем недостающий метод
-  buildSimulationForm() {
-    this.log('buildSimulationForm called - placeholder method');
-    // Реализация этого метода зависит от требований UI
-    return document.createElement('div'); // Заглушка
-  }
-
-  #shuffle(a, seed = 123) {
+  shuffle(a, seed = 123) {
     let s = seed;
     const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
     for (let i = a.length - 1; i > 0; i--) {
