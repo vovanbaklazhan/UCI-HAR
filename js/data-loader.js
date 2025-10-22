@@ -31,11 +31,14 @@ export class DataLoader {
     const cleanedHeaders = headers.map(header => header.trim());
     this.log('Cleaned Headers:', cleanedHeaders); // Логируем очищенные заголовки
 
-    if (!this.#checkTargetColumn('Activity', cleanedHeaders)) {
-      throw new Error('Target column "Activity" not found in the dataset');
+    // Убираем жесткую привязку к "Activity" и пропускаем проверку наличия
+    // Проверяем столбец Activity только после этого
+    const target = 'Activity';
+    if (!cleanedHeaders.includes(target)) {
+      throw new Error(`Target column "${target}" not found in the dataset`);
     }
-    
-    this.#inferSchema();
+
+    this.#inferSchema(target);
     this.setStatus('data loaded');
     this.log(`Loaded rows=${this.raw.length}`);
   }
@@ -52,11 +55,6 @@ export class DataLoader {
     });
   }
 
-  // Проверка наличия целевого столбца "Activity"
-  #checkTargetColumn(target, headers) {
-    return headers.some(header => header.toLowerCase() === target.toLowerCase());
-  }
-
   // Преобразование строки в число
   #num(v) {
     const n = Number(v);
@@ -64,9 +62,7 @@ export class DataLoader {
   }
 
   // Определение схемы данных
-  #inferSchema() {
-    const target = 'Activity';  // Целевой столбец
-    
+  #inferSchema(target) {
     const features = {};
     const cols = Object.keys(this.raw[0]).filter(c => c !== target);  // Исключаем целевой признак
     
