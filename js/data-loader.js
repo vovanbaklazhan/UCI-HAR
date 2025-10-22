@@ -29,11 +29,17 @@ export class DataLoader {
 
     // Очистим заголовки от пробелов и невидимых символов
     const cleanedHeaders = headers.map(header => header.trim().toLowerCase());
-    this.log('Cleaned Headers:', cleanedHeaders); // Логируем очищенные заголовки
+    this.log('Cleaned Headers:', cleanedHeaders);
 
-    // Убираем проверку наличия столбца "Activity"
-    const target = 'activity';  // Устанавливаем "Activity" как целевой столбец
-    this.log(`Using "${target}" as target column`);
+    // Ищем целевой столбец (приводим к нижнему регистру для сравнения)
+    const target = 'activity';
+    const targetFound = cleanedHeaders.includes(target);
+    
+    if (!targetFound) {
+      // Если не нашли, выводим доступные заголовки для отладки
+      this.log('Available headers:', cleanedHeaders);
+      throw new Error(`Target column "${target}" not found in the dataset. Available columns: ${cleanedHeaders.join(', ')}`);
+    }
 
     this.#inferSchema(target);
     this.setStatus('data loaded');
@@ -42,12 +48,12 @@ export class DataLoader {
 
   // Парсинг CSV
   #parseCSV(text) {
-    const [h, ...lines] = text.trim().split(/\r?\n/);  // Разделяем текст на строки
-    const headers = h.split(',').map(s => s.trim());   // Разделяем заголовки и удаляем лишние пробелы
+    const [h, ...lines] = text.trim().split(/\r?\n/);
+    const headers = h.split(',').map(s => s.trim());
 
     return lines.map(line => {
       const cells = line.split(',').map(v => v.trim());
-      const o = {}; headers.forEach((k, i) => o[k] = cells[i] ?? '');  // Заполняем объект для строки
+      const o = {}; headers.forEach((k, i) => o[k] = cells[i] ?? '');
       return o;
     });
   }
@@ -61,14 +67,20 @@ export class DataLoader {
   // Определение схемы данных
   #inferSchema(target) {
     const features = {};
-    const cols = Object.keys(this.raw[0]).filter(c => c !== target);  // Исключаем целевой признак
+    
+    // Используем оригинальные имена столбцов из raw данных
+    const cols = Object.keys(this.raw[0]).filter(c => c.toLowerCase() !== target);
     
     for (const c of cols) {
       let type = 'numeric';
-      if (['road_type', 'lighting', 'weather', 'time_of_day', 'road_signs_present', 'public_road', 'holiday', 'school_season'].includes(c)) {
+      // Приводим к нижнему регистру для сравнения
+      const colLower = c.toLowerCase();
+      if (['road_type', 'lighting', 'weather', 'time_of_day', 'road_signs_present', 'public_road', 'holiday', 'school_season']
+          .map(s => s.toLowerCase()).includes(colLower)) {
         type = 'categorical';
       }
-      if (['num_lanes', 'curvature', 'speed_limit', 'num_reported_accidents'].includes(c)) {
+      if (['num_lanes', 'curvature', 'speed_limit', 'num_reported_accidents']
+          .map(s => s.toLowerCase()).includes(colLower)) {
         type = 'numeric';
       }
 
@@ -79,14 +91,21 @@ export class DataLoader {
     for (const [k, f] of Object.entries(features)) {
       if (f.type === 'numeric') {
         const arr = this.raw.map(r => this.#num(r[k])).filter(Number.isFinite);
-        const min = Math.min(...arr), max = Math.max(...arr);
-        const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-        const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
-        f.stats = { min, max, mean, std };
+        if (arr.length === 0) {
+          f.stats = { min: 0, max: 0, mean: 0, std: 0 };
+        } else {
+          const min = Math.min(...arr), max = Math.max(...arr);
+          const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+          const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
+          f.stats = { min, max, mean, std };
+        }
       } else {
         let vals = [...new Set(this.raw.map(r => String(r[k])).filter(v => v !== '').map(String))];
         const lower = vals.map(v => v.toLowerCase());
-        if (lower.every(v => v === 'true' || v === 'false')) { f.type = 'boolean'; vals = ['True', 'False']; }
+        if (lower.every(v => v === 'true' || v === 'false')) { 
+          f.type = 'boolean'; 
+          vals = ['True', 'False']; 
+        }
         f.values = vals.slice(0, 50);
       }
     }
@@ -120,14 +139,17 @@ export class DataLoader {
         if (f.type === 'numeric') {
           row.push(this.#num(r[k]));
         } else if (f.type === 'boolean') {
-          row.push(String(r[k]) === 'True' ? 1 : 0);
+          row.push(String(r[k]).toLowerCase() === 'true' ? 1 : 0);
         } else {  // категориальные признаки — one-hot
           const cats = this.encoders[k] || [];
           for (const v of cats) row.push(String(r[k]) === v ? 1 : 0);
         }
       }
       X.push(row);
-      y.push([Number(r[this.schema.target])]); // Целевой столбец с активностью
+      
+      // Получаем значение целевого столбца (используем оригинальное имя)
+      const targetValue = r[Object.keys(r).find(key => key.toLowerCase() === this.schema.target)];
+      y.push([Number(targetValue)]);
     }
 
     // Нормализация данных (MinMax)
@@ -146,10 +168,14 @@ export class DataLoader {
 
     for (const c of numericIdx) {
       const colVals = X.map(r => r[c]).filter(Number.isFinite);
-      const min = Math.min(...colVals), max = Math.max(...colVals);
-      const mean = colVals.reduce((a, b) => a + b, 0) / Math.max(1, colVals.length);
-      const std = Math.sqrt(colVals.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (colVals.length - 1)));
-      this.scaler.stats[c] = { min, max, mean, std };
+      if (colVals.length === 0) {
+        this.scaler.stats[c] = { min: 0, max: 0, mean: 0, std: 0 };
+      } else {
+        const min = Math.min(...colVals), max = Math.max(...colVals);
+        const mean = colVals.reduce((a, b) => a + b, 0) / Math.max(1, colVals.length);
+        const std = Math.sqrt(colVals.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (colVals.length - 1)));
+        this.scaler.stats[c] = { min, max, mean, std };
+      }
     }
 
     // Применяем MinMax scaling
