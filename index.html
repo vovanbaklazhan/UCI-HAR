@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Human Activity Recognition — Minimal Demo with Model Settings</title>
+  <style>
+    :root { --gap: 10px; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial; margin: 20px; line-height: 1.45; }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    .row { display: flex; gap: var(--gap); flex-wrap: wrap; align-items: stretch; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.05); background: #fff; }
+    .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--gap); }
+    label { font-size: 12px; color: #333; display: block; margin-bottom: 4px; }
+    select, input[type="number"], input[type="text"], button { width: 100%; }
+    button { cursor: pointer; border: 1px solid #ccc; border-radius: 10px; padding: 8px 12px; background: #fafafa; }
+    button.primary { background: #1e88e5; color: white; border-color: #1976d2; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .badges { display: inline-flex; gap:6px; align-items:center; }
+    .badge { background:#eef; color:#225; padding:2px 8px; border-radius: 999px; font-size: 12px; border:1px solid #dde; }
+    #log { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #0b1020; color: #d3e2ff; padding: 10px; border-radius: 10px; max-height: 260px; overflow: auto; }
+    .pill { display:inline-block; padding:4px 8px; border-radius:999px; border:1px solid #ddd; background:#f7f7f9; font-size: 13px; }
+    .risk { font-weight: 700; padding: 6px 10px; border-radius: 10px; display:inline-block; }
+    .risk.green { background:#e8f5e9; color:#1b5e20; }
+    .risk.yellow{ background:#fffde7; color:#795548; }
+    .risk.red   { background:#ffebee; color:#b71c1c; }
+    fieldset { border: 1px solid #eee; border-radius: 8px; padding: 10px; }
+    legend { font-size: 12px; color:#555; }
+  </style>
+</head>
+<body>
+  <h1>Human Activity Recognition — V05</h1>
+  <div class="badges">
+    <span class="badge" id="tfver">TF.js: …</span>
+    <span class="badge" id="status">Status: ready</span>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div class="controls">
+      <div>
+        <label>Model</label>
+        <select id="arch">
+          <option value="cnn1d" selected>CNN-1D (over features)</option>
+          <option value="mlp">MLP (tabular)</option>
+        </select>
+      </div>
+      
+      <div>
+        <label>Layers</label>
+        <input id="layers" type="number" value="2" min="1" max="5" />
+      </div>
+      
+      <div>
+        <label>Neurons per Layer</label>
+        <input id="neurons" type="number" value="128" min="32" max="512" />
+      </div>
+      
+      <div>
+        <label>Activation Function</label>
+        <select id="activation">
+          <option value="relu" selected>ReLU</option>
+          <option value="sigmoid">Sigmoid</option>
+          <option value="tanh">Tanh</option>
+        </select>
+      </div>
+      
+      <div>
+        <label>Optimizer</label>
+        <select id="optimizer">
+          <option value="adam" selected>Adam</option>
+          <option value="sgd">SGD</option>
+          <option value="rmsprop">RMSprop</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Action</label>
+        <button id="btnTrain" class="primary">Train (Load → Fit → Test)</button>
+      </div>
+
+      <div>
+        <label>Test Accuracy (≥ 0.5)</label>
+        <div id="testAcc" class="pill">—</div>
+      </div>
+    </div>
+    <div class="muted" style="margin-top:6px;font-size:12px">
+      Training fetches <code>./data/train.csv</code>, splits 80/20, trains selected model, then reports binarized accuracy on test (<code>thr=0.5</code>).
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px; opacity:0.6" id="simCard">
+    <div style="font-weight:600; margin-bottom:6px">Simulation (enabled after training)</div>
+    <fieldset disabled id="simFs">
+      <legend>Set all criteria and press “Predict Risk”</legend>
+      <div class="controls" id="simGrid">
+        <!-- form fields will be injected dynamically after data load -->
+      </div>
+      <div class="row" style="margin-top:10px; align-items:center">
+        <div>
+          <button id="btnPredict" class="">Predict Activity</button>
+        </div>
+        <div>
+          <span id="riskOut" class="risk">—</span>
+        </div>
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div style="font-weight:600; margin-bottom:6px">Logs</div>
+    <div id="log">—</div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
