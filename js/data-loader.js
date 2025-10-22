@@ -43,61 +43,65 @@ export class DataLoader {
   }
 
   #parseCSV(text) {
-  const [h, ...lines] = text.trim().split(/\r?\n/);
-  const headers = h.split(',').map(s => s.trim());
-  
-  // Логируем заголовки для отладки
-  console.log('Headers:', headers);  // Логируем заголовки столбцов
-
-  return lines.map((line, idx) => {
-    const cells = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g).map(v => v.replace(/^"(.*)"$/, '$1').trim());
+    const [h, ...lines] = text.trim().split(/\r?\n/);
+    const headers = h.split(',').map(s => s.trim());
     
-    const o = {};
-    headers.forEach((k, i) => {
-      o[k] = cells[i] ?? '';
+    // Логируем заголовки для отладки
+    console.log('Headers:', headers);  // Логируем заголовки столбцов
+
+    return lines.map((line, idx) => {
+      const cells = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g).map(v => v.replace(/^"(.*)"$/, '$1').trim());
+      
+      const o = {};
+      headers.forEach((k, i) => {
+        o[k] = cells[i] ?? '';
+      });
+
+      // Логируем строки данных для отладки
+      if (idx < 5) {  // Показываем первые 5 строк для проверки
+        console.log(`Row ${idx}:`, o);
+      }
+
+      return o;
     });
+  }
 
-    // Логируем строки данных для отладки
-    if (idx < 5) {  // Показываем первые 5 строк для проверки
-      console.log(`Row ${idx}:`, o);
-    }
+  #num(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : NaN;
+  }
 
-    return o;
-  });
-}
-
-#inferSchema() {
-  const target = 'Activity'; // Убедитесь, что это имя столбца соответствует точному названию в данных
-  const headers = Object.keys(this.raw[0]);
-  
-  console.log('Schema headers:', headers);  // Логируем все заголовки
-
-  if (!headers.includes(target)) {
-    // Логируем все столбцы для отладки
+  #inferSchema() {
+    const target = 'Activity'; // Убедитесь, что это имя столбца соответствует точному названию в данных
+    const headers = Object.keys(this.raw[0]);
+    
+    // Логируем доступные столбцы
     console.log('Available columns:', headers);
-    throw new Error(`Target "${target}" not found`);
-  }
 
-  const features = {};
-  const cols = headers.filter(c => c !== target); // Исключаем целевой признак
-
-  for (const c of cols) {
-    let type = 'numeric';
-    features[c] = { name: c, type };
-  }
-
-  for (const [k, f] of Object.entries(features)) {
-    if (f.type === 'numeric') {
-      const arr = this.raw.map(r => this.#num(r[k])).filter(Number.isFinite);
-      const min = Math.min(...arr), max = Math.max(...arr);
-      const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-      const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
-      f.stats = { min, max, mean, std };
+    if (!headers.includes(target)) {
+      throw new Error(`Target "${target}" not found`);
     }
-  }
 
-  this.schema = { features, target };
-}
+    const features = {};
+    const cols = headers.filter(c => c !== target); // Исключаем целевой признак
+
+    for (const c of cols) {
+      let type = 'numeric';
+      features[c] = { name: c, type };
+    }
+
+    for (const [k, f] of Object.entries(features)) {
+      if (f.type === 'numeric') {
+        const arr = this.raw.map(r => this.#num(r[k])).filter(Number.isFinite);
+        const min = Math.min(...arr), max = Math.max(...arr);
+        const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+        const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
+        f.stats = { min, max, mean, std };
+      }
+    }
+
+    this.schema = { features, target };
+  }
 
   prepareMatrices() {
     this.encoders = {};
