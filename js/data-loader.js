@@ -43,27 +43,29 @@ export class DataLoader {
   }
 
   #parseCSV(text) {
-    const [h, ...lines] = text.trim().split(/\r?\n/);
-    const headers = h.split(',').map(s => s.trim());
+  const [h, ...lines] = text.trim().split(/\r?\n/);
+  const headers = h.split(',').map(s => s.trim());
 
-    // Логируем заголовки для отладки
-    console.log('Headers:', headers);  // Логируем заголовки столбцов
+  // Логируем заголовки для отладки
+  console.log('Headers:', headers);  // Логируем заголовки столбцов
 
-    return lines.map((line, idx) => {
-      const cells = line.split(',').map(v => v.trim());
-      const o = {};
-      headers.forEach((k, i) => {
-        o[k] = cells[i] ?? '';
-      });
-
-      // Логируем строки данных для отладки
-      if (idx < 5) {  // Показываем первые 5 строк для проверки
-        console.log(`Row ${idx}:`, o);
-      }
-
-      return o;
+  return lines.map((line, idx) => {
+    // Применяем регулярное выражение для правильного разбора CSV, учитывая кавычки
+    const cells = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g).map(v => v.replace(/^"(.*)"$/, '$1').trim());
+    
+    const o = {};
+    headers.forEach((k, i) => {
+      o[k] = cells[i] ?? '';
     });
-  }
+
+    // Логируем строки данных для отладки
+    if (idx < 5) {  // Показываем первые 5 строк для проверки
+      console.log(`Row ${idx}:`, o);
+    }
+
+    return o;
+  });
+}
 
   #num(v) {
     const n = Number(v);
