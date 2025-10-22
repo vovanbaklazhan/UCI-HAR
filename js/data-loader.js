@@ -23,6 +23,9 @@ export class DataLoader {
     this.raw = this.#parseCSV(text);
     if (!this.raw.length) throw new Error('CSV is empty.');
     
+    // Логируем все имена столбцов
+    this.#logHeaders();
+
     // Проверим, что столбец "Activity" существует
     if (!this.#checkTargetColumn('Activity')) {
       throw new Error('Target column "Activity" not found in the dataset');
@@ -43,6 +46,12 @@ export class DataLoader {
       const o = {}; headers.forEach((k, i) => o[k] = cells[i] ?? '');  // Заполняем объект для строки
       return o;
     });
+  }
+
+  // Логируем все заголовки, чтобы убедиться в их наличии
+  #logHeaders() {
+    const headers = Object.keys(this.raw[0]);
+    this.log('Loaded headers:', headers);  // Логируем все заголовки
   }
 
   // Проверка наличия целевого столбца "Activity"
@@ -196,4 +205,3 @@ export class DataLoader {
     }
   }
 }
-
