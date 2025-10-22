@@ -45,12 +45,15 @@ class DataLoader {
             
             const headers = Object.keys(this.raw[0]);
             this.log(`Loaded ${this.raw.length} rows with ${headers.length} columns`);
+            this.log(`Headers: ${headers.join(', ')}`);
             
-            // Автоматически определяем target колонку
-            let targetColumn = 'Activity';
-            const headerLower = headers.map(h => h.toLowerCase());
-            if (headerLower.includes('activity')) {
-                targetColumn = headers.find(h => h.toLowerCase() === 'activity');
+            // Найдем целевую колонку - попробуем разные варианты
+            let targetColumn = this.findTargetColumn(headers);
+            
+            if (!targetColumn) {
+                // Если не нашли Activity, используем последнюю колонку как целевую
+                targetColumn = headers[headers.length - 1];
+                this.log(`Using last column as target: "${targetColumn}"`);
             }
             
             this.log(`Using target column: "${targetColumn}"`);
@@ -77,8 +80,31 @@ class DataLoader {
         }
     }
 
+    findTargetColumn(headers) {
+        // Попробуем найти целевую колонку по разным именам
+        const possibleTargets = ['Activity', 'activity', 'target', 'label', 'class'];
+        
+        for (const target of possibleTargets) {
+            if (headers.includes(target)) {
+                return target;
+            }
+        }
+        
+        // Попробуем найти по частичному совпадению
+        for (const header of headers) {
+            if (header.toLowerCase().includes('activity') || 
+                header.toLowerCase().includes('target') ||
+                header.toLowerCase().includes('label') ||
+                header.toLowerCase().includes('class')) {
+                return header;
+            }
+        }
+        
+        return null;
+    }
+
     parseCSV(text) {
-        const lines = text.trim().split(/\r?\n/);
+        const lines = text.trim().split(/\r?\n/).filter(line => line.trim());
         if (lines.length === 0) return [];
         
         const headers = lines[0].split(',').map(s => s.trim());
@@ -92,6 +118,7 @@ class DataLoader {
             const row = {};
             
             headers.forEach((header, index) => {
+                // Если ячеек меньше чем заголовков, заполняем недостающие нулями
                 row[header] = cells[index] || '0';
             });
             
@@ -109,34 +136,49 @@ class DataLoader {
         const X = [];
         const y = [];
         
-        this.raw.forEach(row => {
+        this.raw.forEach((row, index) => {
             const features = [];
             let targetValue = null;
+            let hasValidData = false;
             
             Object.keys(row).forEach(key => {
                 const value = row[key];
                 
                 if (key === this.schema.target) {
-                    // Target value - преобразуем в число (0 или 1 для бинарной классификации)
+                    // Target value
                     const num = parseFloat(value);
-                    targetValue = isNaN(num) ? 0 : (num > 0 ? 1 : 0); // Бинаризация
+                    if (!isNaN(num)) {
+                        targetValue = num;
+                        hasValidData = true;
+                    }
                 } else {
                     // Feature value
                     const num = parseFloat(value);
-                    features.push(isNaN(num) ? 0 : num);
+                    if (!isNaN(num)) {
+                        features.push(num);
+                        hasValidData = true;
+                    } else {
+                        features.push(0); // Заменяем NaN на 0
+                    }
                 }
             });
             
-            if (targetValue !== null && features.length > 0) {
+            if (targetValue !== null && features.length > 0 && hasValidData) {
                 X.push(features);
-                y.push(targetValue); // Сохраняем как число, не массив
+                y.push(targetValue);
+            } else {
+                this.log(`Skipping row ${index} - invalid data`);
             }
         });
 
         this.log(`Processed ${X.length} valid samples out of ${this.raw.length} total`);
         
         if (X.length === 0) {
-            throw new Error('No valid samples found after processing');
+            // Покажем пример данных для отладки
+            this.log(`First row sample: ${JSON.stringify(this.raw[0])}`);
+            this.log(`Target column: ${this.schema.target}`);
+            this.log(`Target value in first row: ${this.raw[0][this.schema.target]}`);
+            throw new Error('No valid samples found after processing. Check data format.');
         }
 
         this.X = X;
