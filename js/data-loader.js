@@ -31,7 +31,7 @@ export class DataLoader {
     const cleanedHeaders = headers.map(header => header.trim().toLowerCase());
     this.log('Cleaned Headers:', cleanedHeaders); // Логируем очищенные заголовки
 
-    // Мы убираем проверку наличия столбца "Activity" и присваиваем его вручную
+    // Убираем проверку наличия столбца "Activity"
     const target = 'activity';  // Устанавливаем "Activity" как целевой столбец
     this.log(`Using "${target}" as target column`);
 
@@ -191,7 +191,7 @@ export class DataLoader {
     const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
     for (let i = a.length - 1; i > 0; i--) {
       const j = Math.floor(rnd() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
+      [a[i],a[j]]=[a[j],a[i]];
     }
   }
 }
