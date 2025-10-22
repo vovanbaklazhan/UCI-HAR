@@ -13,9 +13,9 @@ export class DataLoader {
   }
 
   async loadCSV(paths = [
-    'https://github.com/vovanbaklazhan/UCI-HAR/blob/main/data/train_1.csv',
-    'https://github.com/vovanbaklazhan/UCI-HAR/blob/main/data/train_2.csv',
-    'https://github.com/vovanbaklazhan/UCI-HAR/blob/main/data/train_3.csv'
+   'https://vovanbaklazhan.github.io/UCI-HAR/data/train_1.csv',
+  'https://vovanbaklazhan.github.io/UCI-HAR/data/train_2.csv',
+  'https://vovanbaklazhan.github.io/UCI-HAR/data/train_3.csv'
   ]) {
     this.setStatus('loading data…');
     this.log(`Fetching ${paths.join(', ')}`);
