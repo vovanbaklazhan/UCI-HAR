@@ -1,3 +1,4 @@
+// js/data-loader.js
 export class DataLoader {
   constructor(logFn, statusFn) {
     this.log = logFn || console.log;
@@ -49,7 +50,7 @@ export class DataLoader {
   // Определение схемы данных
   #inferSchema() {
     const target = 'Activity';  // Целевой столбец
-    if (!(target in this.raw[0])) throw new Error(`Target "${target}" not found`);
+    if (!(target in this.raw[0])) throw new Error(`Target "${target}" not found`);  // Проверка на наличие столбца
     
     const knownCat = new Set(['road_type', 'lighting', 'weather', 'time_of_day', 'road_signs_present', 'public_road', 'holiday', 'school_season']);
     const knownNum = new Set(['num_lanes', 'curvature', 'speed_limit', 'num_reported_accidents']);
