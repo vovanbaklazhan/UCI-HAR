@@ -12,18 +12,18 @@ export class DataLoader {
     this.featNames = [];
   }
 
-  // Асинхронная функция для загрузки CSV
+  // Загрузка CSV
   async loadCSV(path = 'https://vovanbaklazhan.github.io/UCI-HAR/data/train.csv') {
     this.setStatus('loading data…');
     this.log(`Fetching ${path}`);
     this.raw = [];
 
     try {
-      const res = await fetch(path);  // Запрос на получение данных
+      const res = await fetch(path);  // Используем fetch асинхронно
       if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`);
-      const text = await res.text();  // Получение текста
+      const text = await res.text();  // Получаем текст данных
 
-      // Проверяем, что файл не пустой
+      // Проверка на пустоту
       if (!text.trim()) {
         throw new Error(`CSV file at ${path} is empty.`);
       }
@@ -37,21 +37,21 @@ export class DataLoader {
       throw e;
     }
 
-    // Логируем первую строку данных, чтобы увидеть, что в ней
-    console.log('Raw data preview:', this.raw.slice(0, 5));  // Показать первые 5 строк
+    // Логируем первые 5 строк данных для отладки
+    console.log('Raw data preview:', this.raw.slice(0, 5)); 
 
-    this.inferSchema();
+    this.inferSchema();  // Преобразуем схему данных
     this.setStatus('data loaded');
     this.log(`Total rows loaded: ${this.raw.length}`);
   }
 
-  // Приватный метод для парсинга CSV
+  // Парсинг CSV
   parseCSV(text) {
     const [h, ...lines] = text.trim().split(/\r?\n/);
     const headers = h.split(',').map(s => s.trim());
 
-    // Логируем заголовки для отладки
-    console.log('Headers:', headers);  // Логируем заголовки столбцов
+    // Логируем заголовки столбцов
+    console.log('Headers:', headers);
 
     return lines.map((line, idx) => {
       const cells = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g).map(v => v.replace(/^"(.*)"$/, '$1').trim());
@@ -61,8 +61,8 @@ export class DataLoader {
         o[k] = cells[i] ?? '';
       });
 
-      // Логируем строки данных для отладки
-      if (idx < 5) {  // Показываем первые 5 строк для проверки
+      // Логируем строки данных
+      if (idx < 5) { 
         console.log(`Row ${idx}:`, o);
       }
 
@@ -70,21 +70,22 @@ export class DataLoader {
     });
   }
 
-  // Приватный метод для преобразования строки в число
+  // Преобразование строки в число
   num(v) {
     const n = Number(v);
     return Number.isFinite(n) ? n : NaN;
   }
 
+  // Инференция схемы
   inferSchema() {
-    const target = 'Activity'; // Убедитесь, что это имя столбца соответствует точному названию в данных
+    const target = 'Activity'; // Целевой столбец
     const headers = Object.keys(this.raw[0]);
 
-    // Логируем все заголовки с очисткой пробелов
+    // Логируем доступные заголовки
     const cleanedHeaders = headers.map(header => header.trim());
     console.log('Cleaned headers:', cleanedHeaders);
 
-    // Приводим название целевого столбца и все заголовки к одному регистру для проверки
+    // Приводим заголовки и целевой столбец к единому регистру
     const cleanedTarget = target.trim().toLowerCase();
     const headerFound = cleanedHeaders.some(header => header.toLowerCase() === cleanedTarget);
 
@@ -113,6 +114,7 @@ export class DataLoader {
     this.schema = { features, target };
   }
 
+  // Подготовка матриц для обучения
   prepareMatrices() {
     this.encoders = {};
     this.featNames = [];
@@ -126,61 +128,4 @@ export class DataLoader {
     const y = [];
     for (const r of this.raw) {
       const row = [];
-      for (const [k, f] of Object.entries(this.schema.features)) {
-        if (f.type === 'numeric') {
-          row.push(this.num(r[k]));
-        }
-      }
-      X.push(row);
-      y.push([String(r[this.schema.target])]); // Целевой столбец с активностью
-    }
-
-    this.scaler = { type: 'minmax', stats: {} };
-    const numericIdx = [];
-    let col = 0;
-    for (const [k, f] of Object.entries(this.schema.features)) {
-      if (f.type === 'numeric') {
-        numericIdx.push(col); col += 1;
-      }
-    }
-
-    for (const c of numericIdx) {
-      const colVals = X.map(r => r[c]).filter(Number.isFinite);
-      const min = Math.min(...colVals), max = Math.max(...colVals);
-      const mean = colVals.reduce((a, b) => a + b, 0) / Math.max(1, colVals.length);
-      const std = Math.sqrt(colVals.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (colVals.length - 1)));
-      this.scaler.stats[c] = { min, max, mean, std };
-    }
-
-    for (let i = 0; i < X.length; i++) {
-      for (const c of numericIdx) {
-        const st = this.scaler.stats[c]; const v = X[i][c];
-        if (!Number.isFinite(v)) { X[i][c] = 0; continue; }
-        const d = (st.max - st.min) || 1; X[i][c] = (v - st.min) / d;
-      }
-    }
-
-    this.X = X;
-    this.y = y;
-    const idx = [...Array(X.length).keys()];
-    this.shuffle(idx, 2025);
-    const nTr = Math.floor(idx.length * 0.8);
-    this.idx.train = idx.slice(0, nTr);
-    this.idx.test = idx.slice(nTr);
-    return { featNames: this.featNames };
-  }
-
-  getTrain() { return this.idx.train.map(i => this.X[i]); }
-  getTrainY() { return this.idx.train.map(i => this.y[i]); }
-  getTest() { return this.idx.test.map(i => this.X[i]); }
-  getTestY() { return this.idx.test.map(i => this.y[i]); }
-
-  shuffle(a, seed = 123) {
-    let s = seed;
-    const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(rnd() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-  }
-}
+      for (const [k, f] of Object.entries(this.s
