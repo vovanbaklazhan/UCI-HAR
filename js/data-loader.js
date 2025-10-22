@@ -73,37 +73,75 @@ export class DataLoader {
     return Number.isFinite(n) ? n : NaN;
   }
 
-inferSchema() {
-  const target = 'Activity'; // Убедитесь, что это имя столбца соответствует точному названию в данных
-  const headers = Object.keys(this.raw[0]);
-  
-  // Логируем доступные столбцы
-  console.log('Available columns:', headers);
+loadCSV(path = 'https://vovanbaklazhan.github.io/UCI-HAR/data/train.csv') {
+    this.setStatus('loading data…');
+    this.log(`Fetching ${path}`);
+    this.raw = [];
 
-  if (!headers.includes(target)) {
-    throw new Error(`Target "${target}" not found`);
-  }
+    try {
+        const res = await fetch(path);
+        if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`);
+        const text = await res.text();
 
-  const features = {};
-  const cols = headers.filter(c => c !== target); // Исключаем целевой признак
+        // Проверяем, что файл не пустой
+        if (!text.trim()) {
+            throw new Error(`CSV file at ${path} is empty.`);
+        }
 
-  for (const c of cols) {
-    let type = 'numeric';
-    features[c] = { name: c, type };
-  }
-
-  for (const [k, f] of Object.entries(features)) {
-    if (f.type === 'numeric') {
-      const arr = this.raw.map(r => this.num(r[k])).filter(Number.isFinite);
-      const min = Math.min(...arr), max = Math.max(...arr);
-      const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-      const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
-      f.stats = { min, max, mean, std };
+        const data = this.parseCSV(text);
+        if (!data.length) throw new Error(`CSV ${path} has no valid rows.`);
+        this.raw = [...this.raw, ...data]; // Объединяем данные
+        this.log(`Loaded ${data.length} rows from ${path}`);
+    } catch (e) {
+        this.log(`Error loading ${path}: ${e.message}`);
+        throw e;
     }
-  }
 
-  this.schema = { features, target };
+    // Логируем первую строку данных, чтобы увидеть, что в ней
+    console.log('Raw data preview:', this.raw.slice(0, 5));  // Показать первые 5 строк
+
+    this.inferSchema();
+    this.setStatus('data loaded');
+    this.log(`Total rows loaded: ${this.raw.length}`);
 }
+
+inferSchema() {
+    const target = 'Activity'; // Убедитесь, что это имя столбца соответствует точному названию в данных
+    const headers = Object.keys(this.raw[0]);
+
+    // Логируем все заголовки с очисткой пробелов
+    const cleanedHeaders = headers.map(header => header.trim());
+    console.log('Cleaned headers:', cleanedHeaders);
+
+    // Приводим название целевого столбца и все заголовки к одному регистру для проверки
+    const cleanedTarget = target.trim().toLowerCase();
+    const headerFound = cleanedHeaders.some(header => header.toLowerCase() === cleanedTarget);
+
+    if (!headerFound) {
+        throw new Error(`Target "${target}" not found`);
+    }
+
+    const features = {};
+    const cols = cleanedHeaders.filter(c => c.toLowerCase() !== cleanedTarget); // Исключаем целевой признак
+
+    for (const c of cols) {
+        let type = 'numeric';
+        features[c] = { name: c, type };
+    }
+
+    for (const [k, f] of Object.entries(features)) {
+        if (f.type === 'numeric') {
+            const arr = this.raw.map(r => this.num(r[k])).filter(Number.isFinite);
+            const min = Math.min(...arr), max = Math.max(...arr);
+            const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+            const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
+            f.stats = { min, max, mean, std };
+        }
+    }
+
+    this.schema = { features, target };
+}
+
   prepareMatrices() {
     this.encoders = {};
     this.featNames = [];
