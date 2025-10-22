@@ -12,6 +12,7 @@ export class DataLoader {
     this.featNames = [];
   }
 
+  // Загружаем данные из нескольких файлов
   async loadCSV(paths = [
     'https://vovanbaklazhan.github.io/UCI-HAR/data/train_1.csv',
     'https://vovanbaklazhan.github.io/UCI-HAR/data/train_2.csv',
