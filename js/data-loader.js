@@ -28,7 +28,7 @@ export class DataLoader {
         throw new Error(`CSV file at ${path} is empty.`);
       }
 
-      const data = this.#parseCSV(text);
+      const data = this.parseCSV(text);
       if (!data.length) throw new Error(`CSV ${path} has no valid rows.`);
       this.raw = [...this.raw, ...data]; // Объединяем данные
       this.log(`Loaded ${data.length} rows from ${path}`);
@@ -37,13 +37,13 @@ export class DataLoader {
       throw e;
     }
 
-    this.#inferSchema();
+    this.inferSchema();
     this.setStatus('data loaded');
     this.log(`Total rows loaded: ${this.raw.length}`);
   }
 
   // Приватный метод для парсинга CSV
-  #parseCSV(text) {
+  parseCSV(text) {
     const [h, ...lines] = text.trim().split(/\r?\n/);
     const headers = h.split(',').map(s => s.trim());
 
@@ -68,12 +68,12 @@ export class DataLoader {
   }
 
   // Приватный метод для преобразования строки в число
-  #num(v) {
+  num(v) {
     const n = Number(v);
     return Number.isFinite(n) ? n : NaN;
   }
 
-  #inferSchema() {
+  inferSchema() {
     const target = 'Activity'; // Убедитесь, что это имя столбца соответствует точному названию в данных
     const headers = Object.keys(this.raw[0]);
     
@@ -94,7 +94,7 @@ export class DataLoader {
 
     for (const [k, f] of Object.entries(features)) {
       if (f.type === 'numeric') {
-        const arr = this.raw.map(r => this.#num(r[k])).filter(Number.isFinite);
+        const arr = this.raw.map(r => this.num(r[k])).filter(Number.isFinite);
         const min = Math.min(...arr), max = Math.max(...arr);
         const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
         const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
@@ -120,7 +120,7 @@ export class DataLoader {
       const row = [];
       for (const [k, f] of Object.entries(this.schema.features)) {
         if (f.type === 'numeric') {
-          row.push(this.#num(r[k]));
+          row.push(this.num(r[k]));
         }
       }
       X.push(row);
@@ -155,7 +155,7 @@ export class DataLoader {
     this.X = X;
     this.y = y;
     const idx = [...Array(X.length).keys()];
-    this.#shuffle(idx, 2025);
+    this.shuffle(idx, 2025);
     const nTr = Math.floor(idx.length * 0.8);
     this.idx.train = idx.slice(0, nTr);
     this.idx.test = idx.slice(nTr);
@@ -167,7 +167,7 @@ export class DataLoader {
   getTest() { return this.idx.test.map(i => this.X[i]); }
   getTestY() { return this.idx.test.map(i => this.y[i]); }
 
-  #shuffle(a, seed = 123) {
+  shuffle(a, seed = 123) {
     let s = seed;
     const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
     for (let i = a.length - 1; i > 0; i--) {
