@@ -23,19 +23,18 @@ export class DataLoader {
     this.raw = this.#parseCSV(text);
     if (!this.raw.length) throw new Error('CSV is empty.');
 
-    // Логируем заголовки и очищаем их от пробелов и невидимых символов
+    // Логируем заголовки
     const headers = Object.keys(this.raw[0]);
-    this.log('Raw Headers:', headers);  // Логируем все заголовки
+    this.log('Raw Headers:', headers);
 
-    // Очистим и проверим столбец "Activity"
-    const cleanedHeaders = headers.map(header => header.trim());
+    // Очистим заголовки от пробелов и невидимых символов
+    const cleanedHeaders = headers.map(header => header.trim().toLowerCase());
     this.log('Cleaned Headers:', cleanedHeaders); // Логируем очищенные заголовки
 
-    // Убираем жесткую привязку к "Activity" и пропускаем проверку наличия
-    // Проверяем столбец Activity только после этого
-    const target = 'Activity';
+    // Проверяем, что в очищенных заголовках есть "activity"
+    const target = 'activity';  // Целевой столбец
     if (!cleanedHeaders.includes(target)) {
-      throw new Error(`Target column "${target}" not found in the dataset`);
+      throw new Error(`Target column "Activity" not found in the dataset`);
     }
 
     this.#inferSchema(target);
