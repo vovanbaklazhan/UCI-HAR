@@ -13,14 +13,15 @@ export class DataLoader {
   }
 
   // Загружаем данные из нескольких файлов
-  async loadCSV(paths = [
-    'https://vovanbaklazhan.github.io/UCI-HAR/data/train_1.csv',
-    'https://vovanbaklazhan.github.io/UCI-HAR/data/train_2.csv',
-    'https://vovanbaklazhan.github.io/UCI-HAR/data/train_3.csv'
-  ]) {
+  async loadCSV(paths) {
+    if (typeof paths === 'string') {
+      paths = [paths];  // Если передан один путь, преобразуем его в массив
+    }
+
     if (!Array.isArray(paths)) {
       throw new Error('Expected an array of paths.');
     }
+
     this.setStatus('loading data…');
     this.log(`Fetching ${paths.join(', ')}`);
     this.raw = [];
