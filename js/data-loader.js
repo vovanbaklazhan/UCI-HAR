@@ -22,12 +22,16 @@ export class DataLoader {
     const text = await res.text();
     this.raw = this.#parseCSV(text);
     if (!this.raw.length) throw new Error('CSV is empty.');
-    
-    // Логируем все имена столбцов
-    this.#logHeaders();
 
-    // Проверим, что столбец "Activity" существует
-    if (!this.#checkTargetColumn('Activity')) {
+    // Логируем заголовки и очищаем их от пробелов и невидимых символов
+    const headers = Object.keys(this.raw[0]);
+    this.log('Raw Headers:', headers);  // Логируем все заголовки
+
+    // Очистим и проверим столбец "Activity"
+    const cleanedHeaders = headers.map(header => header.trim());
+    this.log('Cleaned Headers:', cleanedHeaders); // Логируем очищенные заголовки
+
+    if (!this.#checkTargetColumn('Activity', cleanedHeaders)) {
       throw new Error('Target column "Activity" not found in the dataset');
     }
     
@@ -48,16 +52,9 @@ export class DataLoader {
     });
   }
 
-  // Логируем все заголовки, чтобы убедиться в их наличии
-  #logHeaders() {
-    const headers = Object.keys(this.raw[0]);
-    this.log('Loaded headers:', headers);  // Логируем все заголовки
-  }
-
   // Проверка наличия целевого столбца "Activity"
-  #checkTargetColumn(target) {
-    const headers = Object.keys(this.raw[0]);
-    return headers.some(header => header.trim().toLowerCase() === target.toLowerCase());
+  #checkTargetColumn(target, headers) {
+    return headers.some(header => header.toLowerCase() === target.toLowerCase());
   }
 
   // Преобразование строки в число
