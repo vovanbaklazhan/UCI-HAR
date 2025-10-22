@@ -77,41 +77,44 @@ export class DataLoader {
   }
 
   inferSchema() {
-    const target = 'Activity'; // Убедитесь, что это имя столбца соответствует точному названию в данных
-    const headers = Object.keys(this.raw[0]);
+  const target = 'Activity'; // Целевой столбец
+  const headers = Object.keys(this.raw[0]);
 
-    // Логируем все заголовки с очисткой пробелов
-    const cleanedHeaders = headers.map(header => header.trim());
-    console.log('Cleaned headers:', cleanedHeaders);
+  // Логируем доступные заголовки и очищаем их от лишних пробелов
+  const cleanedHeaders = headers.map(header => header.trim());
+  console.log('Cleaned headers:', cleanedHeaders); // Логируем заголовки для отладки
 
-    // Приводим название целевого столбца и все заголовки к одному регистру для проверки
-    const cleanedTarget = target.trim().toLowerCase();
-    const headerFound = cleanedHeaders.some(header => header.toLowerCase() === cleanedTarget);
+  // Приводим целевой столбец и заголовки к одному регистру для проверки
+  const cleanedTarget = target.trim().toLowerCase();
+  const headerFound = cleanedHeaders.some(header => header.toLowerCase() === cleanedTarget);
 
-    if (!headerFound) {
-      throw new Error(`Target "${target}" not found`);
-    }
-
-    const features = {};
-    const cols = cleanedHeaders.filter(c => c.toLowerCase() !== cleanedTarget); // Исключаем целевой признак
-
-    for (const c of cols) {
-      let type = 'numeric';
-      features[c] = { name: c, type };
-    }
-
-    for (const [k, f] of Object.entries(features)) {
-      if (f.type === 'numeric') {
-        const arr = this.raw.map(r => this.num(r[k])).filter(Number.isFinite);
-        const min = Math.min(...arr), max = Math.max(...arr);
-        const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-        const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
-        f.stats = { min, max, mean, std };
-      }
-    }
-
-    this.schema = { features, target };
+  // Логируем, найден ли целевой столбец
+  if (!headerFound) {
+    console.error(`Target "${target}" not found in cleaned headers:`, cleanedHeaders);
+    throw new Error(`Target "${target}" not found`);
   }
+
+  const features = {};
+  const cols = cleanedHeaders.filter(c => c.toLowerCase() !== cleanedTarget); // Исключаем целевой признак
+
+  for (const c of cols) {
+    let type = 'numeric';
+    features[c] = { name: c, type };
+  }
+
+  // Логируем статистику по признакам
+  for (const [k, f] of Object.entries(features)) {
+    if (f.type === 'numeric') {
+      const arr = this.raw.map(r => this.num(r[k])).filter(Number.isFinite);
+      const min = Math.min(...arr), max = Math.max(...arr);
+      const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+      const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
+      f.stats = { min, max, mean, std };
+    }
+  }
+
+  this.schema = { features, target };
+}
 
   prepareMatrices() {
     this.encoders = {};
