@@ -45,9 +45,9 @@ export class DataLoader {
   #parseCSV(text) {
     const [h, ...lines] = text.trim().split(/\r?\n/);
     const headers = h.split(',').map(s => s.trim());
-    
+
     // Логируем заголовки для отладки
-    console.log('Headers:', headers);
+    console.log('Headers:', headers);  // Логируем заголовки столбцов
 
     return lines.map((line, idx) => {
       const cells = line.split(',').map(v => v.trim());
@@ -70,33 +70,33 @@ export class DataLoader {
     return Number.isFinite(n) ? n : NaN;
   }
 
- #inferSchema() {
-  const target = 'Activity'; // Убедитесь, что это имя столбца соответствует точному названию в данных
-  if (!(target in this.raw[0])) {
-    throw new Error(`Target "${target}" not found`);
-  }
-
-  const features = {};
-  const cols = Object.keys(this.raw[0]).filter(c => c !== target); // Исключаем целевой признак
-
-  for (const c of cols) {
-    let type = 'numeric';
-    features[c] = { name: c, type };
-  }
-
-  for (const [k, f] of Object.entries(features)) {
-    if (f.type === 'numeric') {
-      const arr = this.raw.map(r => this.#num(r[k])).filter(Number.isFinite);
-      const min = Math.min(...arr), max = Math.max(...arr);
-      const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-      const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
-      f.stats = { min, max, mean, std };
+  #inferSchema() {
+    // Здесь мы ищем правильное имя целевого столбца (Target)
+    const target = 'Activity'; // Убедитесь, что это имя столбца соответствует точному названию в данных
+    if (!(target in this.raw[0])) {
+      throw new Error(`Target "${target}" not found`);  // Если нет, выбрасываем ошибку
     }
+
+    const features = {};
+    const cols = Object.keys(this.raw[0]).filter(c => c !== target); // Исключаем целевой признак
+
+    for (const c of cols) {
+      let type = 'numeric';
+      features[c] = { name: c, type };
+    }
+
+    for (const [k, f] of Object.entries(features)) {
+      if (f.type === 'numeric') {
+        const arr = this.raw.map(r => this.#num(r[k])).filter(Number.isFinite);
+        const min = Math.min(...arr), max = Math.max(...arr);
+        const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+        const std = Math.sqrt(arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / Math.max(1, (arr.length - 1)));
+        f.stats = { min, max, mean, std };
+      }
+    }
+
+    this.schema = { features, target };
   }
-
-  this.schema = { features, target };
-}
-
 
   prepareMatrices() {
     this.encoders = {};
